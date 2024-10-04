@@ -47,7 +47,7 @@ Kemono Extended is a Firefox addon that aims to provide additional functionality
    </summary>
    When a post doesn't have a thumbnail, the addon tries to get an image<br>
    from the post to set as the thumbnail.<br>
-   If the post doesn't contain images, the addon uses the post itself as the thumbnail.
+   If the post doesn't contain images, the addon uses the post itself as the thumbnail.<br>
    This is limited to one thumbnail every ~1 second because of rate limiting.
 </details>
 <details>
