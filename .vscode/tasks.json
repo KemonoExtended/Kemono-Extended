@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Webpack",
+            "type": "shell",
+            "command": "npx watch webpack",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Web-ext",
+            "type": "shell",
+            "command": "web-ext run",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Web-ext main profile",
+            "type": "shell",
+            "command": "web-ext run --firefox-profile C:/Users/julia/AppData/Roaming/Mozilla/Firefox/Profiles/yhe06v7r.default-release-2 --devtools",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Web-ext Android",
+            "type": "shell",
+            "command": "web-ext run -t firefox-android --adb-device R3CR50546NT --firefox-apk org.mozilla.fenix --adb-remove-old-artifacts",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+        {
+            "label": "Build version",
+            "type": "shell",
+            "command": "web-ext build --overwrite-dest",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ]
+}

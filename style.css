@@ -1,0 +1,315 @@
+:root {
+    --bg-color-1: #131314;
+    --bg-color-2: #1a1a1a;
+    --bg-color-2-hover: #262728;
+    --bg-color-2-active: #122d3e;
+    --bg-color-3: #262728;
+    --bg-color-3-hover: #3b3c3e;
+    --bg-color-3-active: #1c489f;
+    --bg-color-selected: #004a77;
+    --bg-color-selected-hover: #0477be;
+    --bg-color-selected-active: #009dff;
+    --text-color-active: #c2e7ff;
+    --text-color-inactive: #e3e3e3;
+    --text-color-full: #ffffff;
+    --text-color-link: #a8c7fa;
+    --notification-background: #101010;
+}
+
+.download-div {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    margin-right: 15px;
+    margin-bottom: 15px;
+    background-size: contain;
+    border-radius: 1000px;
+    background-color: rgba(0, 0, 0, 0.47);
+    transition: background-color 0.20s ease-in-out;
+}
+
+.download {
+    pointer-events: none;
+    height: 80%;
+    width: 80%;
+    background-size: contain;
+    filter: invert(1);
+    margin: 10%;
+    background-image: url("./icons/Google Download.svg");
+    opacity: 1;
+    transition: opacity 0.20s ease-out;
+}
+
+.download-finished {
+    pointer-events: none;
+    height: 80%;
+    width: 80%;
+    background-size: contain;
+    filter: invert(1);
+    margin: 10%;
+    background-image: url("./icons/Google Download Done.svg");
+    opacity: 1;
+    transition: opacity 0.20s ease-out;
+}
+
+.download-cancel {
+    pointer-events: none;
+    height: 60%;
+    width: 60%;
+    background-size: contain;
+    margin: 20%;
+    background-image: url("./icons/Google Download Cancel.svg");
+    opacity: 0;
+    position: absolute;
+    top: 0px;
+    z-index: 1000;
+    border-radius: 1000px;
+    opacity: 0;
+    transition: opacity 0.20s ease-out;
+}
+
+.download-div:hover .download-cancel {
+    opacity: 1;
+    transition: opacity 0.20s ease-out;
+}
+
+.download-failed {
+    pointer-events: none;
+    height: 80%;
+    width: 80%;
+    background-size: contain;
+    filter: invert(1);
+    margin: 10%;
+    background-image: url("./icons/Google Download Failed.svg");
+    opacity: 1;
+    transition: opacity 0.20s ease-out;
+}
+
+.fileThumb:hover .download-div {
+    opacity: 1;
+    background-color: black;
+}
+
+.image-div {
+    display: flex !important;
+    flex-direction: column-reverse !important;
+    align-items: end;
+}
+
+.seen-badge {
+    display: unset;
+    position: absolute;
+    z-index: 1000;
+    font-size: smaller;
+    color: white;
+    background-color: #000000ad;
+    margin-bottom: 30px;
+    margin-left: 4px;
+    padding: 7px;
+    padding-top: 0px;
+    padding-bottom: 1px;
+    border-radius: 8px;
+    bottom: 15px;
+    box-shadow: 0px 0px 5px 1px #ffffff3e;
+}
+
+.seen-post {
+    transition: filter 0.1s ease;
+    filter: brightness(40%) saturate(60%);
+}
+
+.seen-post:hover {
+    transition: filter 0.1s ease;
+    filter: brightness(100%) saturate(100%);
+}
+
+.read-all {
+    padding: 0px;
+    cursor: pointer;
+    text-align: center;
+    border-radius: 5px;
+    background: none;
+    border-color: transparent;
+    color: white;
+    text-shadow: #000 0px 0px 3px, #000 -1px -1px 0px, #000 1px 1px 0px;
+    order: 1;
+    width: 110px;
+    height: 35px;
+    margin-left: 10px;
+}
+
+.undo {
+    background-color: rgba(255, 0, 0, 0.379);
+}
+
+.subscribe {
+    padding: 0px;
+    cursor: pointer;
+    text-align: center;
+    border-radius: 5px;
+    background: none;
+    border-color: transparent;
+    color: white;
+    text-shadow: #000 0px 0px 3px, #000 -1px -1px 0px, #000 1px 1px 0px;
+    order: 2;
+    width: 140px;
+    margin-left: 10px;
+    height: 35px;
+}
+
+.subscribed {
+    background-color: rgba(255, 0, 0, 0.379);
+}
+
+.new-posts {
+    color: white;
+    background-color: red;
+    border-radius: 10000px;
+    text-align: center;
+    width: 25px;
+    height: 25px;
+    position: absolute;
+    left: 87px;
+    top: 12px;
+}
+
+.new-posts-user {
+    border-style: solid;
+    border-width: 4px;
+    border-color: red;
+}
+
+.text-thumbnail {
+    overflow: scroll;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    padding-bottom: 30px;
+    min-height: 100px;
+}
+
+.text-thumbnail-div {
+    overflow: hidden;
+    background-color: #1d1f20;
+    height: 100%;
+}
+
+.text-thumbnail-gradient {
+    background-image: linear-gradient(to bottom, #1d1f20 50%, transparent 100%);
+    z-index: 1000;
+    height: 7px;
+    width: 100%;
+    position: absolute;
+}
+
+#progress-container {
+    margin: 5px;
+    position: absolute;
+    top: 0px;
+    opacity: 0;
+    transition: opacity 0.20s ease-in-out;
+    pointer-events: none;
+}
+
+.notifications {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    width: 100%;
+    height: fit-content;
+    bottom: 0px;
+    pointer-events: none;
+    z-index: 99999;
+}
+
+.notification-div {
+    pointer-events: all;
+    position: relative;
+    left: 0px;
+    height: 0px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 0px;
+    transition: height 0.3s cubic-bezier(.77, 0, .18, 1), margin-bottom 0.3s cubic-bezier(.77, 0, .18, 1);
+}
+
+.notification {
+    width: fit-content;
+    max-width: max(80vw, 250px);
+    min-width: min(80vw, 150px);
+    height: fit-content;
+    background-color: var(--notification-background);
+    border-style: none;
+    border-radius: 7px;
+    overflow: hidden;
+    height: 44px;
+    box-shadow: 0px 0px 5px 0px var(--notification-background);
+    box-sizing: unset;
+    line-height: unset;
+}
+
+.notification-content {
+    padding: 5px;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+
+}
+
+.notification-text {
+    margin: 0px;
+    padding: 5px;
+    user-select: none;
+    line-height: unset;
+}
+
+.notification-dismiss {
+    width: 15px;
+    height: 15px;
+    margin: 0px;
+    margin-top: auto;
+    margin-bottom: auto;
+    padding: 5px;
+    border-radius: 100px;
+    background-color: var(--bg-color-3);
+    text-align: center;
+    vertical-align: middle;
+    line-height: 15px;
+    font-size: small;
+    user-select: none;
+    cursor: pointer;
+    line-height: unset;
+}
+
+.notification-dismiss:hover {
+    background-color: var(--bg-color-3-hover);
+}
+
+.notification-dismiss:active {
+    background-color: var(--bg-color-3-active);
+}
+
+.dismiss-bar-div {
+    width: 100%;
+    height: 5px;
+    background-color: var(--bg-color-3);
+    margin: auto;
+    margin-top: 0px;
+    display: flex;
+    justify-content: left;
+}
+
+.dismiss-bar {
+    background-color: var(--bg-color-3-active);
+    height: 100%;
+    margin: 0px;
+    width: 0%;
+    transition: width linear 3s;
+}
+
+.notification-thumbnail {
+    height: 28px;
+    width: auto;
+    border-radius: 5px;
+}

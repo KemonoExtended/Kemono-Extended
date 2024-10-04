@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html
+  style="width: 100vw; min-width: 400px; height: 100vh; min-height: 600px"
+  lang="en"
+>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title></title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="./options-style.css" />
+    <script src="./options.js"></script>
+  </head>
+
+  <body>
+    <div class="content-div" id="contentDiv">
+      <div id="content" class="content">
+        <div class="header">
+          <h1 class="title" id="title">
+            <span style="opacity: 0.3" class="title-letter glowy">K</span>
+            <span style="opacity: 0.3" class="title-letter glowy">e</span>
+            <span style="opacity: 0.3" class="title-letter glowy">m</span>
+            <span style="opacity: 0.3" class="title-letter glowy">o</span>
+            <span style="opacity: 0.3" class="title-letter glowy">n</span>
+            <span style="opacity: 0.3" class="title-letter glowy">o</span>
+            <span
+              style="opacity: 0.3"
+              class="title-letter glowy letter-spacer"
+            ></span>
+            <span style="opacity: 0.3" class="title-letter glowy">E</span>
+            <span style="opacity: 0.3" class="title-letter glowy">x</span>
+            <span style="opacity: 0.3" class="title-letter glowy">t</span>
+            <span style="opacity: 0.3" class="title-letter glowy">e</span>
+            <span style="opacity: 0.3" class="title-letter glowy">n</span>
+            <span style="opacity: 0.3" class="title-letter glowy">d</span>
+            <span style="opacity: 0.3" class="title-letter glowy">e</span>
+            <span style="opacity: 0.3" class="title-letter glowy">d</span>
+          </h1>
+        </div>
+        <div class="main">
+          <div
+            class="gradient"
+            style="transform: rotate(180deg); top: 0px"
+          ></div>
+          <div class="settings" id="settings"></div>
+          <div class="gradient"></div>
+        </div>
+        <div class="footer">
+          <hr class="devider" />
+          <!--<div class="action-buttons" id="actionButtons">
+            <p class="export-import-button hover-glow" id="exportSettings">
+              export data
+            </p>
+            <p class="export-import-button hover-glow" id="importSettings">
+              import data
+            </p>
+            <input
+              type="file"
+              id="importFilePicker"
+              accept="image/png, image/jpeg"
+              hidden="true"
+            />
+          </div>-->
+          <div class="action-buttons" id="actionButtons">
+            <p class="action-button hover-glow" id="clearSettings">
+              reset settings
+            </p>
+            <p class="action-button hover-glow" id="clearPosts">
+              reset visited posts
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="popup-div popup-hidden" id="popupDiv">
+      <div class="popup" style="pointer-events: inherit">
+        <p class="popup-title" id="popupHeader" style="pointer-events: inherit">
+          Title
+        </p>
+        <p
+          class="popup-text"
+          id="popupText"
+          style="pointer-events: inherit"
+        ></p>
+        <div class="dismiss-div" style="pointer-events: inherit">
+          <input
+            type="button"
+            value="Dismiss"
+            class="dismiss hover-glow"
+            style="pointer-events: inherit"
+          />
+        </div>
+      </div>
+    </div>
+    <div class="notifications" id="notifications"></div>
+  </body>
+</html>

@@ -1,0 +1,457 @@
+:root {
+	--bg-color-1: #131314;
+	--bg-color-2: #1a1a1a;
+	--bg-color-2-hover: #262728;
+	--bg-color-2-active: #122d3e;
+	--bg-color-3: #262728;
+	--bg-color-3-hover: #3b3c3e;
+	--bg-color-3-active: #1c489f;
+	--bg-color-selected: #004a77;
+	--bg-color-selected-hover: #0477be;
+	--bg-color-selected-active: #009dff;
+	--text-color-active: #c2e7ff;
+	--text-color-inactive: #e3e3e3;
+	--text-color-full: #ffffff;
+	--text-color-link: #a8c7fa;
+	--notification-background: #101010;
+}
+
+body {
+	background-color: var(--bg-color-1);
+	color: var(--text-color-inactive);
+	font-family: 'Roboto', sans-serif;
+	margin: auto;
+	display: flex;
+	flex-direction: column;
+	border-style: solid;
+	padding: 0px;
+	border-style: none;
+	border-color: white;
+	border-width: 10px;
+	width: 100%;
+	height: 100%;
+}
+
+html {
+	margin: auto;
+}
+
+.content {
+	padding: 5px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+	margin: auto;
+	margin-top: 0px;
+	width: calc(Min(100%, 400px) - 10px);
+	height: calc(Min(100%, 550px) - 20px);
+}
+
+.content-div {
+	width: 100%;
+	height: 100%;
+	background-color: var(--bg-color-1);
+	transition: filter 0.13s ease-out;
+}
+
+.content-hidden {
+	filter: blur(2px) brightness(60%);
+	pointer-events: none;
+}
+
+.title {
+	width: fit-content;
+	margin: auto;
+	margin-top: 20px;
+	margin-bottom: 20px;
+	-webkit-user-select: none;
+	/* Safari */
+	-ms-user-select: none;
+	/* IE 10 and IE 11 */
+	user-select: none;
+	/* Standard syntax */
+	display: flex;
+}
+
+.title-letter {
+	margin: 0px;
+	padding: 0px;
+	color: rgb(255, 255, 255);
+}
+
+.letter-spacer {
+	width: 0.5ch;
+}
+
+.settings {
+	padding-left: 15px;
+	padding-right: 15px;
+	max-height: 440px;
+	overflow: scroll;
+
+}
+
+.gradient {
+	position: relative;
+	top: -10px;
+	width: 100%;
+	height: 10px;
+	margin: 0px;
+	margin-bottom: -10px;
+	background: linear-gradient(rgba(0, 0, 0, 0), var(--bg-color-1));
+}
+
+.yn-options {
+	cursor: pointer;
+	display: flex;
+	flex-direction: row;
+	background-color: var(--bg-color-2);
+	padding: 10px;
+	margin: 0px;
+	margin-top: 10px;
+	margin-bottom: 10px;
+	border-radius: 7px;
+	transition: background-color ease-out 0.13s, box-shadow 0.2s ease-out;
+	justify-content: space-between;
+	padding-right: 15px;
+	padding-left: 15px;
+	box-shadow: none;
+}
+
+.yn-options-locked {
+	cursor: not-allowed;
+}
+
+.yn-options:hover {
+	background-color: var(--bg-color-2-hover);
+	transition: background-color ease-out 0.13s;
+	box-shadow: 0 0 5px rgba(255, 255, 255, 0.02),
+		0 0 10px rgba(255, 255, 255, 0.02),
+		0 0 15px rgba(255, 255, 255, 0.02),
+		0 0 20px rgba(255, 255, 255, 0.02),
+		0 0 25px rgba(255, 255, 255, 0.02);
+}
+
+.yn-options:active {
+	background-color: var(--bg-color-2-active);
+	transition: background-color ease-out 0.13s;
+}
+
+.yn-options:hover .help-div {
+	opacity: 1;
+}
+
+.yn-text {
+	width: calc(inherit - 20px);
+	padding: 0px;
+	margin: 0px;
+	-webkit-user-select: none;
+	/* Safari */
+	-ms-user-select: none;
+	/* IE 10 and IE 11 */
+	user-select: none;
+	/* Standard syntax */
+}
+
+.yn-text-locked {
+	color: gray;
+}
+
+.yn-checkbox {
+	width: 20px;
+	padding: 0px;
+	margin: 0px;
+	margin-right: 15px;
+}
+
+.yn-container {
+	display: flex;
+	flex-direction: row;
+	height: 100%;
+	margin-top: auto;
+	margin-bottom: auto;
+}
+
+.help {
+	margin: auto;
+	width: fit-content;
+	margin-top: auto;
+	height: 100%;
+	line-height: 30px;
+	font-size: 15px;
+	-webkit-user-select: none;
+	/* Safari */
+	-ms-user-select: none;
+	/* IE 10 and IE 11 */
+	user-select: none;
+	/* Standard syntax */
+}
+
+.help-div {
+	background-color: var(--bg-color-selected);
+	height: 30px;
+	width: 30px;
+	border-radius: 9999px;
+	margin-left: 10px;
+	opacity: 0;
+	transition: background-color ease-out 0.13s, box-shadow 0.2s ease-out;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.help-div:hover {
+	background-color: var(--bg-color-selected-hover);
+	box-shadow: 0 0 5px rgba(255, 255, 255, 0.02),
+		0 0 10px rgba(255, 255, 255, 0.02),
+		0 0 15px rgba(255, 255, 255, 0.02),
+		0 0 20px rgba(255, 255, 255, 0.02),
+		0 0 25px rgba(255, 255, 255, 0.02);
+}
+
+.help-div:active {
+	background-color: var(--bg-color-selected-active);
+}
+
+.dismiss {
+	position: relative;
+	margin: 0px;
+	width: auto;
+	border-style: none;
+	border-radius: 7px;
+	padding: 5px;
+	padding-left: 10px;
+	padding-right: 10px;
+	color: white;
+	background-color: var(--bg-color-3);
+	transition: background-color ease-out 0.13s;
+	cursor: pointer;
+}
+
+.dismiss-div {
+	display: flex;
+	justify-content: right;
+	margin: 10px;
+}
+
+.dismiss:hover {
+	background-color: var(--bg-color-3-hover);
+}
+
+.dismiss:active {
+	background-color: var(--bg-color-3-active);
+}
+
+.popup-text {
+	margin: 10px;
+	position: relative;
+	width: auto;
+}
+
+.popup-title {
+	margin: 10px;
+	position: relative;
+	width: auto;
+	font-size: larger;
+	font-weight: 600;
+}
+
+.popup-div {
+	height: 100vh;
+	width: 100vw;
+	left: 0px;
+	display: flex;
+	align-items: center;
+	position: fixed;
+	flex-direction: column;
+}
+
+.popup {
+	padding-top: 5px;
+	width: 80%;
+	max-width: 400px;
+	height: fit-content;
+	background-color: var(--bg-color-2);
+	margin: auto;
+	border-radius: 7px;
+	opacity: 1;
+	pointer-events: all;
+	transition: opacity 0.13s ease-out;
+}
+
+.popup-input {
+	background-color: var(--text-color-full);
+	border-style: none;
+	border-radius: 5px;
+	margin: 10px;
+	width: calc(99% - 20px);
+	height: 50vh;
+	max-height: 300px;
+	min-height: 100px;
+	color: black;
+	resize: none;
+}
+
+.popup-hidden {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.blur {
+	filter: blur(2px) brightness(40%);
+	pointer-events: none;
+}
+
+.export-import-button {
+	background-color: var(--bg-color-3);
+	padding: 10px;
+	margin: 5px;
+	width: 50%;
+	border-radius: 7px;
+	transition: background-color ease-out 0.13s;
+	padding-right: 15px;
+	padding-left: 15px;
+	text-align: center;
+	user-select: none;
+	cursor: pointer;
+	font-size: small;
+}
+
+.export-import-button:hover {
+	background-color: rgb(67, 67, 67);
+	transition: background-color ease-out 0.13s;
+}
+
+.export-import-button:active {
+	background-color: var(--bg-color-3-active);
+	transition: background-color ease-out 0.13s;
+}
+
+.action-button {
+	background-color: rgb(143, 29, 29);
+	padding: 10px;
+	margin: 5px;
+	width: 50%;
+	border-radius: 7px;
+	transition: background-color ease-out 0.13s;
+	padding-right: 15px;
+	padding-left: 15px;
+	text-align: center;
+	user-select: none;
+	cursor: pointer;
+	font-size: small;
+}
+
+.action-button:hover {
+	background-color: rgb(182, 31, 31);
+	transition: background-color ease-out 0.13s;
+}
+
+.action-button:active {
+	background-color: rgb(255, 0, 0);
+	transition: background-color ease-out 0.13s;
+}
+
+.action-buttons {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+}
+
+.devider {
+	width: 80%;
+	margin-top: 10px;
+	border-style: solid;
+	border-color: rgb(138, 138, 138);
+}
+
+.notifications {
+	display: flex;
+	flex-direction: column;
+	position: fixed;
+	width: 100%;
+	height: fit-content;
+	bottom: 0px;
+	pointer-events: none;
+
+}
+
+.notification-div {
+	pointer-events: all;
+	position: relative;
+	left: 0px;
+	height: 0px;
+	width: fit-content;
+	margin-left: auto;
+	margin-right: auto;
+	margin-bottom: 0px;
+	transition: height 0.3s cubic-bezier(.77, 0, .18, 1), margin-bottom 0.3s cubic-bezier(.77, 0, .18, 1);
+}
+
+.notification {
+	width: fit-content;
+	max-width: max(80vw, 250px);
+	min-width: min(80vw, 150px);
+	height: fit-content;
+	background-color: var(--notification-background);
+	border-style: none;
+	border-radius: 7px;
+	overflow: hidden;
+	height: 44px;
+	box-shadow: 0px 0px 5px 0px var(--notification-background);
+}
+
+.notification-content {
+	padding: 5px;
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+
+}
+
+.notification-text {
+	margin: 0px;
+	padding: 5px;
+	user-select: none;
+}
+
+.notification-dismiss {
+	width: 15px;
+	height: 15px;
+	margin: 0px;
+	margin-top: auto;
+	margin-bottom: auto;
+	padding: 5px;
+	border-radius: 100px;
+	background-color: var(--bg-color-3);
+	text-align: center;
+	vertical-align: middle;
+	line-height: 15px;
+	font-size: small;
+	user-select: none;
+	cursor: pointer;
+}
+
+.notification-dismiss:hover {
+	background-color: var(--bg-color-3-hover);
+}
+
+.notification-dismiss:active {
+	background-color: var(--bg-color-3-active);
+}
+
+.dismiss-bar-div {
+	width: 100%;
+	height: 5px;
+	background-color: var(--bg-color-3);
+	margin: auto;
+	margin-top: 0px;
+	display: flex;
+	justify-content: left;
+}
+
+.dismiss-bar {
+	background-color: var(--bg-color-3-active);
+	height: 100%;
+	margin: 0px;
+	width: 0%;
+	transition: width linear 3s;
+}

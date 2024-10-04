@@ -1,0 +1,42 @@
+{
+  "manifest_version": 2,
+  "name": "Kemono Extended",
+  "version": "1.4",
+  "description": "Kemono Extended adds downloading, notifications, easier navigation and much more to Kemono.su and Coomer.su",
+  "icons": {
+    "48": "./icons/favicon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.kemono.su/*",
+        "*://*.coomer.su/*"
+      ],
+      "js": [
+        "./dist/KemonoExtended.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "permissions": [
+    "notifications",
+    "downloads",
+    "storage",
+    "unlimitedStorage",
+    "tabs",
+    "*://*.kemono.su/*",
+    "*://*.coomer.su/*"
+  ],
+  "background": {
+    "scripts": [
+      "./Downloader.js"
+    ],
+    "persistent": true
+  },
+  "browser_action": {
+    "default_popup": "./Popup.html",
+    "default_icon": {
+      "48": "./icons/favicon.png"
+    }
+  }
+}
