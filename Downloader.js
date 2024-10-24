@@ -204,7 +204,7 @@ function CancelDownload(url) {
     })
 }
 
-browser.runtime.onMessage.addListener((message) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type == "download") {
         if (downloadQueue.find(((element) => element.url == message.url)) == undefined) {
             QueDownload(message.url, message.DBPath)
@@ -219,6 +219,8 @@ browser.runtime.onMessage.addListener((message) => {
                 browser.tabs.sendMessage(tab.id, { type: "DBUpdate" });
             });
         });
+    } else if (message.type == "ping") {
+        sendResponse(true)
     }
 });
 

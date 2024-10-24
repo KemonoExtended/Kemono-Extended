@@ -69,14 +69,15 @@ CreateNodeObserver(
 
 const extensionID = chrome.runtime.id;
 let postID;
+let notificationID = 0;
+let restoredImages = 0;
 
 // local DB copies
-let syncStorage = {};
+let syncStorage = {}; // not acually synchronous across devices, just persistent storage
 let tempStorage = {};
-console.log(tempStorage)
+//console.log(tempStorage)
 
 FetchDB().then(() => { Main(); });
-
 
 function Main() {
     RecieveSettingsUpdates();
@@ -90,11 +91,33 @@ function Main() {
         SeePostFromPost();
 
         postID = document.URL.match(regex.postToIDRegex)[0];
-
-        window.onload = () => {
+        if (document.readyState === true) {
             let textDivs = document.getElementsByClassName("fileThumb")
             for (let i = 0; i < textDivs.length; i++) {
-                CreateDownloadButton(textDivs[i], "href", regex.imageToIDRegex);
+                if (!textDivs[i].firstElementChild.complete) {
+                    textDivs[i].firstElementChild.addEventListener("load", (imageDiv) => {
+                        CreateDownloadButton(textDivs[i], "href", regex.imageToIDRegex);
+                    })
+                }
+                else {
+
+                    CreateDownloadButton(textDivs[i], "href", regex.imageToIDRegex);
+                }
+            }
+        } else {
+            window.onload = () => {
+                let textDivs = document.getElementsByClassName("fileThumb")
+                for (let i = 0; i < textDivs.length; i++) {
+                    if (!textDivs[i].firstElementChild.complete) {
+                        textDivs[i].firstElementChild.addEventListener("load", (imageDiv) => {
+                            CreateDownloadButton(textDivs[i], "href", regex.imageToIDRegex);
+                        })
+                    }
+                    else {
+
+                        CreateDownloadButton(textDivs[i], "href", regex.imageToIDRegex);
+                    }
+                }
             }
         }
     }
@@ -131,8 +154,9 @@ function Main() {
         }
 
 
-        const service = document.URL.match(regex.serviceRegex)[0];
-        SendRequest(`https://${service}.su/api/v1/creators`).then((dataString) => {
+        const service = document.URL.match(regex.siteRegex)[0];
+        //console.log(service)
+        SendRequest(`https://${service}.su/api/v1/creators.txt`).then((dataString) => {
             let data = JSON.parse(dataString);
             console.log(data, dataString)
             let entry = data.find((element) => {
@@ -269,7 +293,7 @@ function CreateReadAllButton(parentNode) { //Adds subscription button on user pa
     parentNode.style.display = "flex"
     let readAllExisting = document.getElementById("readAllButton");
     if (readAllExisting) {
-        console.log("readAll button already exists, value = " + syncStorage.settings.readAllFF.value);
+        // console.log("readAll button already exists, value = " + syncStorage.settings.readAllFF.value);
         if (syncStorage.settings.readAllFF.value) {
             readAllExisting.style.display = "block";
         }
@@ -301,7 +325,7 @@ function CreateReadAllButton(parentNode) { //Adds subscription button on user pa
         postAmount = parseInt(postTags[0].textContent.match(regex.userPostAmountRegex)[0]);
     }
 
-    console.log(syncStorage.postDB[userID].data.lastPostAmount + " " + postAmount)
+    // console.log(syncStorage.postDB[userID].data.lastPostAmount + " " + postAmount)
     if (syncStorage.postDB[userID].data.readAllDate == -1 || syncStorage.postDB[userID].data.lastPostAmount != postAmount) {
         readAllButton.classList.add("read-all");
         readAllButton.textContent = "Read All";
@@ -358,7 +382,7 @@ function ReadAll() { //Sets a timestamp to the last read all date to now
 }
 
 function CreateSeenBadge(postElement) { //Creates a badge and style for posts that have been seen or read previously
-    console.log(postElement)
+    // console.log(postElement)
     if (!syncStorage.settings.readPostsFF.value) {
         return;
     }
@@ -425,14 +449,15 @@ function AddUnreadBadges() { // adds a badge to user browsers which indicates wh
     GetSessionStorage()
     console.log("tempstorage: " + tempStorage)
 
-    service = document.location.href.match(regex.serviceRegex)[0];
-    SendRequest(`https://${service}.su/api/v1/creators`).then((dataString) => {
+    let service = document.location.href.match(regex.siteRegex)[0];
+    console.log(service)
+    SendRequest(`https://${service}.su/api/v1/creators.txt`).then((dataString) => {
         let data = JSON.parse(dataString);
         console.log(data)
         let profiles = document.getElementsByClassName("user-card")
         for (let i = 0; i < profiles.length; i++) {
             let entry = data.find((element) => {
-                return element.id == profiles[i].dataset.id
+                return element.id == profiles[i].href.match(regex.userToIDRegex)[0];
             })
             if (syncStorage.postDB.hasOwnProperty(entry.id)) {
                 if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate")) {
@@ -725,8 +750,6 @@ async function MobileDownload(url, onProgress, onFinish, thumbnailURL) {
         } else {
             console.error('Fetch error:', error);
         }
-    } finally {
-
     }
 }
 
@@ -767,8 +790,6 @@ function RestoreImages() {
     if (!syncStorage.settings.restoreThumbnailsFF.value) {
         return
     }
-    let restoredImages = 0;
-
     CreateNodeObserver(
         (element) => {
             return element.tagName == "A" &&
@@ -777,62 +798,71 @@ function RestoreImages() {
                 element.getElementsByClassName("post-card__image").length == 0
         },
         (element) => {
-            let postUserID = element.href.match(regex.postToIDRegex)[0];
-            let postID = element.href.match(regex.postToIDRegex)[0];
-
-            if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
-                let entry = tempStorage.postDB[postUserID][postID];
-                CreateThumbnail(element, entry.content, entry.type);
-            } else {
-                restoredImages++;
-                setTimeout(() => {
-                    RequestRestoreImage(element).then((data) => {
-
-                        let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
-                        let contentLinks;
-                        try {
-                            console.log(element, data[0].content)
-                            contentLinks = data[0].content.match(regex.postContentToImageLinkRegex)
-                                .filter((element) => { console.log(element, element.match(regex.fileExtensionRegex)[0]); return imageFormats.includes(element.match(regex.fileExtensionRegex)[0]) })
-                        } catch { }
-
-                        let attachmentLinks;
-                        try {
-                            attachmentLinks = data[0].attachments.filter((element) =>
-                                imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                                .map(element => element.path)
-                        } catch { }
-                        console.log(attachmentLinks, contentLinks)
-
-                        let imageLinks = [];
-                        if (attachmentLinks != undefined && attachmentLinks.length > 0) {
-                            imageLinks = attachmentLinks
-                        } else if (contentLinks != undefined && contentLinks.length > 0) {
-                            imageLinks = contentLinks
-                        }
-
-                        if (!tempStorage.postDB.hasOwnProperty(postUserID)) {
-                            tempStorage.postDB[postUserID] = {}
-                        }
-
-                        if (imageLinks.length > 0) {
-                            CreateThumbnail(element, imageLinks[0], "image");
-                            console.log(imageLinks[0])
-
-                            tempStorage.postDB[postUserID][postID] = { type: "image", content: imageLinks[0] }
-                        } else {
-                            CreateThumbnail(element, data[0], "text");
-
-                            tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
-                        }
-                        sessionStorage.setItem("cache", tempStorage)
-                        SetSessionStorage();
-                    })
-                }, restoredImages * 800)
-            }
+            RestoreImage(element)
         }
     )
+    let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
+    elements.forEach(element => {
+        RestoreImage(element)
+    });
     GetSessionStorage();
+}
+
+function RestoreImage(element) {
+    // console.log(element)
+    let postUserID = element.href.match(regex.postToIDRegex)[0];
+    let postID = element.href.match(regex.postToIDRegex)[0];
+
+    if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
+        let entry = tempStorage.postDB[postUserID][postID];
+        CreateThumbnail(element, entry.content, entry.type);
+    } else {
+        restoredImages++;
+        setTimeout(() => {
+            RequestRestoreImage(element).then((data) => {
+
+                let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
+                let contentLinks;
+                try {
+                    console.log(element, data[0].content)
+                    contentLinks = data[0].content.match(regex.postContentToImageLinkRegex)
+                        .filter((element) => { console.log(element, element.match(regex.fileExtensionRegex)[0]); return imageFormats.includes(element.match(regex.fileExtensionRegex)[0]) })
+                } catch { }
+
+                let attachmentLinks;
+                try {
+                    attachmentLinks = data[0].attachments.filter((element) =>
+                        imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                        .map(element => element.path)
+                } catch { }
+                console.log(attachmentLinks, contentLinks)
+
+                let imageLinks = [];
+                if (attachmentLinks != undefined && attachmentLinks.length > 0) {
+                    imageLinks = attachmentLinks
+                } else if (contentLinks != undefined && contentLinks.length > 0) {
+                    imageLinks = contentLinks
+                }
+
+                if (!tempStorage.postDB.hasOwnProperty(postUserID)) {
+                    tempStorage.postDB[postUserID] = {}
+                }
+
+                if (imageLinks.length > 0) {
+                    CreateThumbnail(element, imageLinks[0], "image");
+                    console.log(imageLinks[0])
+
+                    tempStorage.postDB[postUserID][postID] = { type: "image", content: imageLinks[0] }
+                } else {
+                    CreateThumbnail(element, data[0], "text");
+
+                    tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
+                }
+                sessionStorage.setItem("cache", tempStorage)
+                SetSessionStorage();
+            })
+        }, restoredImages * 800)
+    }
 }
 
 function RequestRestoreImage(element) {
@@ -852,7 +882,7 @@ function RequestRestoreImage(element) {
 
 function CreateThumbnail(element, content, type) {
     if (type == "image") {
-        console.log(content)
+        //console.log(content)
         if (element.getElementsByClassName("post-card__image-container").length == 0) {
             const textDiv = document.createElement("div");
             textDiv.classList.add("post-card__image-container");
@@ -995,7 +1025,7 @@ function GetSessionStorage() {
     if (!tempStorage.hasOwnProperty("postDB")) {
         tempStorage.postDB = {}
     }
-    console.log(sessionStorage)
+    //console.log(sessionStorage)
     SetSessionStorage()
 }
 
@@ -1101,15 +1131,31 @@ function CreateNodeObserver(
 }
 
 function SendRequest(url) {
-    console.log("Sending request to " + url);
-    let before = Date.now();
     return new Promise((resolve, reject) => {
+        let service = url.match(regex.siteRegex);
+        if (url == `https://${service}.su/api/v1/creators.txt`) {
+            GetSessionStorage()
+            if (!tempStorage.hasOwnProperty("urls")) {
+                tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
+                SetSessionStorage()
+            }
+            else if (Date.now() - tempStorage.urls.artists[service].date < 0) {
+                resolve(tempStorage.urls.artists[service].data)
+            }
+        }
+        console.log("Sending request to " + url);
+        let before = Date.now();
         fetch(url)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
                 console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
+                if (url == `https://${service}.su/api/v1/creators.txt`) {
+                    tempStorage.urls.artists[service].data = response
+                    tempStorage.urls.artists[service].date = Date.now()
+                }
+                SetSessionStorage()
                 resolve(response.text());
             })
             .catch(error => {
@@ -1148,11 +1194,11 @@ function SwipeNavigation() {
                             document.body.style.transform = "translate(0vw)";
                         }
                     });
-                    document.body.style.overflow = "hidden"
+                    //document.body.style.overflow = "hidden"  // intended to hide the side bar. will reset scroll position to top.
                     if (direction == "left") {
-                        document.body.style.transform = "translate(-100vw)";
+                        document.body.style.transform = "translate(-160vw)";
                     } else {
-                        document.body.style.transform = "translate(100vw)";
+                        document.body.style.transform = "translate(160vw)";
                     }
                     window.location.href = link[0].href
                 }
@@ -1225,8 +1271,6 @@ class SwipeDetector {
         }
     }
 }
-
-let notificationID = 0;
 
 function SendNotification(text, thumbnailURL = null) {
     if (document.getElementById("notifications") == null) {
