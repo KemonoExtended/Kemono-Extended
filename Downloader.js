@@ -75,7 +75,7 @@ function CheckWatched() {
                 }, 1000)
             }
         })
-    }, 9000000)
+    }, 3600000)
 }
 
 function Download(tries = 0) {
