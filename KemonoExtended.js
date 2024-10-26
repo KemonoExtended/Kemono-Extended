@@ -1,9 +1,7 @@
 const { storage } = browser;
 const { session } = browser.storage;
 const browserStorage = browser.storage.local;
-import video from 'fluent-ffmpeg/lib/options/video';
 import ProgressBar from 'progressbar.js';
-import { Parser } from 'webpack';
 
 const isMobile = window.matchMedia("(pointer: coarse)").matches;
 console.log(isMobile)
@@ -858,7 +856,7 @@ function RestoreImage(element) {
                                 thumbnail.video = [data[0].file.path]
                             }
                         }
-                    } catch { }
+                    } catch { };
                 }
 
 
