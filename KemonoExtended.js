@@ -1,7 +1,9 @@
 const { storage } = browser;
 const { session } = browser.storage;
 const browserStorage = browser.storage.local;
+import video from 'fluent-ffmpeg/lib/options/video';
 import ProgressBar from 'progressbar.js';
+import { Parser } from 'webpack';
 
 const isMobile = window.matchMedia("(pointer: coarse)").matches;
 console.log(isMobile)
@@ -154,9 +156,11 @@ function Main() {
         }
 
 
+        console.log(document.URL)
         const service = document.URL.match(regex.siteRegex)[0];
-        //console.log(service)
-        SendRequest(`https://${service}.su/api/v1/creators.txt`).then((dataString) => {
+        const requestURL = `https://${service}.su/api/v1/creators.txt`
+        console.log(requestURL)
+        SendRequest(requestURL).then((dataString) => {
             let data = JSON.parse(dataString);
             console.log(data, dataString)
             let entry = data.find((element) => {
@@ -790,6 +794,7 @@ function RestoreImages() {
     if (!syncStorage.settings.restoreThumbnailsFF.value) {
         return
     }
+    GetSessionStorage();
     CreateNodeObserver(
         (element) => {
             return element.tagName == "A" &&
@@ -805,15 +810,14 @@ function RestoreImages() {
     elements.forEach(element => {
         RestoreImage(element)
     });
-    GetSessionStorage();
 }
 
 function RestoreImage(element) {
     // console.log(element)
-    let postUserID = element.href.match(regex.postToIDRegex)[0];
+    let postUserID = element.href.match(regex.userToIDRegex)[0];
     let postID = element.href.match(regex.postToIDRegex)[0];
 
-    if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
+    if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID) && false) {
         let entry = tempStorage.postDB[postUserID][postID];
         CreateThumbnail(element, entry.content, entry.type);
     } else {
@@ -822,44 +826,83 @@ function RestoreImage(element) {
             RequestRestoreImage(element).then((data) => {
 
                 let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
-                let contentLinks;
+                let videoFormats = ["mp4", "webm", "mkv", "avi", "m4v"]
+                let thumbnail = { image: undefined, video: undefined };
+
+
                 try {
                     console.log(element, data[0].content)
-                    contentLinks = data[0].content.match(regex.postContentToImageLinkRegex)
-                        .filter((element) => { console.log(element, element.match(regex.fileExtensionRegex)[0]); return imageFormats.includes(element.match(regex.fileExtensionRegex)[0]) })
+                    const parser = new DOMParser();
+                    let contentDOM = parser.parseFromString(data[0].content, 'text/html')
+                    let imageElements = Array.from(contentDOM.all).filter(element3 => element3.tagName == "IMG" || element3.tagName == "VIDEO")
+
+                    if (imageElements.length > 0) {
+                        thumbnail.image = imageElements.find((element) => imageFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
+
+                        if (thumbnail.image == undefined) {
+                            thumbnail.video = imageElements.find((element) => videoFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
+                        }
+                    }
                 } catch { }
 
-                let attachmentLinks;
-                try {
-                    attachmentLinks = data[0].attachments.filter((element) =>
-                        imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                        .map(element => element.path)
-                } catch { }
-                console.log(attachmentLinks, contentLinks)
 
-                let imageLinks = [];
-                if (attachmentLinks != undefined && attachmentLinks.length > 0) {
-                    imageLinks = attachmentLinks
-                } else if (contentLinks != undefined && contentLinks.length > 0) {
-                    imageLinks = contentLinks
+                if (thumbnail.image == undefined) {
+                    try {
+                        let fileExtension = data[0].file.path.match(regex.fileExtensionRegex)[0]
+                        if (imageFormats.includes(fileExtension)) {
+                            thumbnail.image = [data[0].file.path]
+
+                        }
+                        if (thumbnail.image == undefined && thumbnail.video == undefined) {
+                            if (videoFormats.includes(fileExtension)) {
+                                thumbnail.video = [data[0].file.path]
+                            }
+                        }
+                    } catch { }
                 }
 
-                if (!tempStorage.postDB.hasOwnProperty(postUserID)) {
-                    tempStorage.postDB[postUserID] = {}
+
+                if (thumbnail.image == undefined)
+                    try {
+                        thumbnail.image = data[0].attachments.find((element) =>
+                            imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                            .map(element => element.path)
+
+                        if (thumbnail.image == undefined && thumbnail.video == undefined) {
+                            thumbnail.video = data[0].attachments.find((element) =>
+                                videoFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                                .map(element => element.path)
+                        }
+                    } catch { }
+
+                console.log(thumbnail)
+
+                tempStorage.postDB[postUserID] = {};
+                tempStorage.postDB[postUserID][postID] = {};
+
+                if (thumbnail.image != undefined) {
+                    GetSessionStorage();
+                    tempStorage.postDB[postUserID][postID] = { type: "image", content: thumbnail.image }
+                    SetSessionStorage();
+
+                    CreateThumbnail(element, thumbnail.image, "image");
                 }
 
-                if (imageLinks.length > 0) {
-                    CreateThumbnail(element, imageLinks[0], "image");
-                    console.log(imageLinks[0])
+                else if (thumbnail.video != undefined) {
+                    GetSessionStorage();
+                    tempStorage.postDB[postUserID][postID] = { type: "video", content: thumbnail.video }
+                    SetSessionStorage();
 
-                    tempStorage.postDB[postUserID][postID] = { type: "image", content: imageLinks[0] }
-                } else {
-                    CreateThumbnail(element, data[0], "text");
+                    CreateThumbnail(element, thumbnail.video, "video");
+                }
 
+                else {
+                    GetSessionStorage();
                     tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
+                    SetSessionStorage();
+
+                    CreateThumbnail(element, data[0], "text");
                 }
-                sessionStorage.setItem("cache", tempStorage)
-                SetSessionStorage();
             })
         }, restoredImages * 800)
     }
@@ -867,21 +910,21 @@ function RestoreImage(element) {
 
 function RequestRestoreImage(element) {
     return new Promise((resolve) => {
-        const href = element.href;
+        const href = element.href
         const urlMatches = href.match(regex.postToApiRegex);
         const apiURL = urlMatches[1] + "/api/v1" + urlMatches[2];
         SendRequest(apiURL).then((data) => {
             const request = JSON.parse(data);
             if (request != null) {
-                resolve([request, apiURL]);
+                resolve([request, apiURL])
             }
-            resolve(undefined)
+            resolve(undefined);
         })
     })
 }
 
 function CreateThumbnail(element, content, type) {
-    if (type == "image") {
+    if (type == "image" || type == "video") {
         //console.log(content)
         if (element.getElementsByClassName("post-card__image-container").length == 0) {
             const textDiv = document.createElement("div");
@@ -889,7 +932,7 @@ function CreateThumbnail(element, content, type) {
             element.insertBefore(textDiv, element.firstElementChild.nextElementSibling);
         }
         const textDiv = element.children[1];
-        const imageElement = document.createElement("img")
+        const imageElement = document.createElement(type)
         imageElement.classList.add("post-card__image")
         imageElement.src = content
         textDiv.appendChild(imageElement)
@@ -910,7 +953,11 @@ function CreateThumbnail(element, content, type) {
         gradient1.style.top = element.firstElementChild.offsetHeight + "px";
 
         const parser = new DOMParser();
-        const textElement = parser.parseFromString(content.content + (content.hasOwnProperty("file") && Object.keys(content.file).length != 0 ? `<a class="post__attachment-link" href="https://${document.URL.match(regex.siteRegex)}.su/data${content.file.path}" download="${content.file.name}">Download ${content.file.name}</a >` : ""), 'text/html');
+        const textElement = parser.parseFromString(content.content + (
+            content.hasOwnProperty("file") && Object.keys(content.file).length != 0 ?
+                `<a class="post__attachment-link" href="https://${document.URL.match(regex.siteRegex)}.su/data${content.file.path}" download="${content.file.name}">Download ${content.file.name}</a >` :
+                ""
+        ), 'text/html');
         textDiv.appendChild(textElement.body)
         let textBody = textDiv.lastElementChild;
         textBody.classList.add("text-thumbnail")
@@ -1132,14 +1179,14 @@ function CreateNodeObserver(
 
 function SendRequest(url) {
     return new Promise((resolve, reject) => {
-        let service = url.match(regex.siteRegex);
+        let service = url.match(regex.siteRegex)[0];
         if (url == `https://${service}.su/api/v1/creators.txt`) {
             GetSessionStorage()
             if (!tempStorage.hasOwnProperty("urls")) {
                 tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
                 SetSessionStorage()
             }
-            else if (Date.now() - tempStorage.urls.artists[service].date < 0) {
+            else if (Date.now() - tempStorage.urls.artists[service].date < 0) { // update every 10 minutes
                 resolve(tempStorage.urls.artists[service].data)
             }
         }
@@ -1151,7 +1198,7 @@ function SendRequest(url) {
                     throw new Error('Network response was not ok');
                 }
                 console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
-                if (url == `https://${service}.su/api/v1/creators.txt`) {
+                if (url == `https://${service}.su/api/v1/creators.txt` && response.length > 0) {
                     tempStorage.urls.artists[service].data = response
                     tempStorage.urls.artists[service].date = Date.now()
                 }

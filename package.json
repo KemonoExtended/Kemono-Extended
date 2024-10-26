@@ -1,11 +1,11 @@
 {
   "devDependencies": {
-    "webpack": "^5.94.0",
+    "web-ext": "^8.3.0",
+    "webpack": "^5.95.0",
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "progressbar.js": "^1.1.1",
-    "web-ext": "^8.3.0"
+    "progressbar.js": "^1.1.1"
   },
   "name": "kemonoextended",
   "version": "1.0.0",
