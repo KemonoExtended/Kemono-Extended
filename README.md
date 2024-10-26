@@ -86,6 +86,6 @@ Steps to build:<br>
 ```
 npm install --save-dev webpack
 npm install --save-dev web-ext
-Webpack
+webpack
 web-ext build --overwrite-dest
 ```
