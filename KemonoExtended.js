@@ -71,13 +71,54 @@ const extensionID = chrome.runtime.id;
 let postID;
 let notificationID = 0;
 let restoredImages = 0;
+let URL;
 
 // local DB copies
 let syncStorage = {}; // not acually synchronous across devices, just persistent storage
 let tempStorage = {};
 //console.log(tempStorage)
 
-FetchDB().then(() => { Main(); });
+
+CreateMutationObserver(
+    (mutation) => {
+        if (mutation.type === "childList" && mutation.removedNodes.length > 0) {
+            for (let i = 0; i < mutation.removedNodes.length; i++) {
+                let node = mutation.removedNodes[i]
+                if (URL != document.URL && node.nodeType === 1 && node.classList.contains("loading-icon")) {
+                    FetchDB().then(() => { Main(); });
+                    URL = document.URL;
+                    break;
+                }
+            }
+        }
+    },
+    () => {
+        console.error(mutation)
+    },
+    true
+)
+
+CreateNodeObserver(
+    (element) => element.classList.contains("content-wrapper"),
+    () => {
+        FetchDB().then(() => { Main(); });
+        URL = document.URL
+    },
+    true
+)
+
+setInterval(
+    () => {
+
+        if (URL != document.URL) {
+            FetchDB().then(() => { Main(); });
+            URL = document.URL;
+        }
+    },
+    200
+)
+
+
 
 function Main() {
     RecieveSettingsUpdates();
@@ -91,7 +132,7 @@ function Main() {
         SeePostFromPost();
 
         postID = document.URL.match(regex.postToIDRegex)[0];
-        if (document.readyState === true) {
+        if (document.readyState == "complete") {
             let textDivs = document.getElementsByClassName("fileThumb")
             for (let i = 0; i < textDivs.length; i++) {
                 if (!textDivs[i].firstElementChild.complete) {
@@ -555,10 +596,12 @@ function CreateDownloadButton(element, attribute, attributeRegex) {
     let pBContainer = document.createElement("div");
     pBContainer.id = "progress-container";
     downloadDiv.appendChild(pBContainer);
-    downloadDiv.addEventListener("click", () => {
+    downloadDiv.addEventListener("click", (e) => {
+        e.stopImmediatePropagation();
+        e.stopPropagation();
         console.log(downloadDiv)
         QueDownload(imageURL, downloadDiv, thumbnailURL);
-    });
+    }, { capture: true });
 }
 
 function QueDownload(url, downloadDiv, thumbnailURL) {
@@ -1167,6 +1210,26 @@ function CreateNodeObserver(
                     if (singleUse) {
                         observer.disconnect();
                     }
+                }
+            }
+        }
+    });
+
+    observer.observe(node, { childList: true, subtree: true });
+}
+
+function CreateMutationObserver(
+    Test,
+    Callback,
+    singleUse = false,
+    node = document,
+) {
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (Test(mutation)) {
+                Callback(node);
+                if (singleUse) {
+                    observer.disconnect();
                 }
             }
         }
