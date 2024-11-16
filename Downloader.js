@@ -56,6 +56,9 @@ function CheckSubscribed() {
                                 }
                                 request = request.splice(0, unreadPosts);
 
+                                syncStorage.subscribed[userID].lastPost = request[0].added;
+                                SetDB()
+
                                 let postTitles = request.slice(0, request.length == 50 ? Math.min(3, request.length) : 4).map(element => element.title);
 
                                 let notification = browser.notifications.create({
