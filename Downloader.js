@@ -20,62 +20,65 @@ let settingsDefaults = {
 
 let syncStorage = {};
 FetchDB();
-CheckWatched()
 
-function CheckWatched() {
-    setInterval(() => {
-        FetchDB().then(() => {
-            if (!syncStorage.settings.subscriptionsFF.value) {
-                return
-            }
-            if (Object.keys(syncStorage.watched).length > 0) {
-                let watchedIndex = 0;
-                let watchedKeys = Object.keys(syncStorage.watched)
-                let interval2 = setInterval(() => {
-                    if (watchedKeys.length <= watchedIndex) {
-                        clearInterval(interval2)
-                    } else {
-                        const userID = watchedKeys[watchedIndex];
-                        const apiURL = "https://" + syncStorage.watched[userID].site + ".su/api/v1/" +
-                            syncStorage.watched[userID].service + "/user/" +
-                            watchedKeys[watchedIndex];
-                        SendRequest(apiURL).then((data) => {
-                            let request = JSON.parse(data);
-                            if (request != null) {
-                                if (syncStorage.watched[userID].lastPost != request[0].added) {
-                                    let unreadPosts = 0;
-                                    for (let i = 0; i < request.length; i++) {
-                                        if (request[i].added != syncStorage.watched[userID].lastPost) {
-                                            unreadPosts++;
-                                        }
-                                        else { break; }
+CheckSubscribed()
+setInterval(() => {
+    CheckSubscribed()
+}, 1800000) // repeat every half hour
+
+function CheckSubscribed() {
+    FetchDB().then(() => {
+        if (!syncStorage.settings.subscriptionsFF.value) {
+            return
+        }
+        console.log("checking for new posts...");
+        if (Object.keys(syncStorage.subscribed).length > 0) {
+            let subscribedIndex = 0;
+            let subscribedKeys = Object.keys(syncStorage.subscribed)
+            let interval2 = setInterval(() => {
+                if (subscribedKeys.length <= subscribedIndex) {
+                    clearInterval(interval2)
+                } else {
+                    const userID = subscribedKeys[subscribedIndex];
+                    const apiURL = "https://" + syncStorage.subscribed[userID].site + ".su/api/v1/" +
+                        syncStorage.subscribed[userID].service + "/user/" +
+                        subscribedKeys[subscribedIndex];
+                    SendRequest(apiURL).then((data) => {
+                        let request = JSON.parse(data);
+                        if (request != null) {
+                            if (syncStorage.subscribed[userID].lastPost != request[0].added) {
+                                let unreadPosts = 0;
+                                for (let i = 0; i < request.length; i++) {
+                                    if (request[i].added != syncStorage.subscribed[userID].lastPost) {
+                                        unreadPosts++;
                                     }
-                                    request = request.splice(0, unreadPosts);
-
-                                    let postTitles = request.slice(0, request.length == 50 ? Math.min(3, request.length) : 4).map(element => element.title);
-
-                                    let notification = browser.notifications.create({
-                                        type: 'basic',
-                                        iconUrl: `https://img.${syncStorage.watched[userID].site}.su/icons/${syncStorage.watched[userID].service}/${userID}`, // URL to the icon to display
-                                        title: `${unreadPosts + (unreadPosts == 50 ? "+" : "")} new post${unreadPosts > 1 ? 's' : ''} by ${syncStorage.watched[userID].creatorName}`,
-                                        message: postTitles.join('\n') + (request.length > 3 ? ('\n...and ' + (request.length - 3) + (request.length == 50 ? '+' : '') + ' more') : ''),
-                                    });
-                                    notification.then((id) => {
-                                        browser.notifications.onClicked.addListener((clickedID) => {
-                                            if (clickedID == id) {
-                                                browser.tabs.create({ url: `https://${syncStorage.watched[userID].site}.su/${syncStorage.watched[userID].service}/user/${userID}` });
-                                            }
-                                        })
-                                    })
+                                    else { break; }
                                 }
-                                watchedIndex++;
+                                request = request.splice(0, unreadPosts);
+
+                                let postTitles = request.slice(0, request.length == 50 ? Math.min(3, request.length) : 4).map(element => element.title);
+
+                                let notification = browser.notifications.create({
+                                    type: 'basic',
+                                    iconUrl: `https://img.${syncStorage.subscribed[userID].site}.su/icons/${syncStorage.subscribed[userID].service}/${userID}`, // URL to the icon to display
+                                    title: `${unreadPosts + (unreadPosts == 50 ? "+" : "")} new post${unreadPosts > 1 ? 's' : ''} by ${syncStorage.subscribed[userID].creatorName}`,
+                                    message: postTitles.join('\n') + (request.length > 3 ? ('...\nand ' + (request.length - 3) + (request.length == 50 ? '+' : '') + ' more') : ''),
+                                });
+                                notification.then((id) => {
+                                    browser.notifications.onClicked.addListener((clickedID) => {
+                                        if (clickedID == id) {
+                                            browser.tabs.create({ url: `https://${syncStorage.subscribed[userID].site}.su/${syncStorage.subscribed[userID].service}/user/${userID}` });
+                                        }
+                                    })
+                                })
                             }
-                        })
-                    }
-                }, 1000)
-            }
-        })
-    }, 3600000)
+                            subscribedIndex++;
+                        }
+                    })
+                }
+            }, 1000)
+        }
+    })
 }
 
 function Download(tries = 0) {

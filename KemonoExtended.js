@@ -21,7 +21,7 @@ const regex = {
     // Regular expressions for ID extraction
     imageToIDRegex: /(?<=\/data\/\w+\/\w+\/)\w{7}(?=\w+\.\w+)/, // Finds ID in image link
     postToIDRegex: /(?<=\w+\/user\/[^/]+\/post\/)(\d+)/, // Finds ID in post link
-    userToIDRegex: /(?<=\w+\/user\/)([^/]+)/, // Finds ID in user profile link
+    userToIDRegex: /(?<=\w+\/user\/)([^/?=]+)/, // Finds ID in user profile link
 
     // Regular Expressions for ID extraction on Discord servers
     servertoIDRegex: /(?<=discord\/server\/)\d{8}/, // Finds ID in Discord server URL
@@ -168,9 +168,8 @@ function Main() {
                 if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
                     syncStorage.postDB[userID].data = {};
                 }
-                syncStorage.postDB[userID].data.lastImportDate = DateToUnix(entry.last_imported);
+                syncStorage.postDB[userID].data.lastImportDate = DateToUnix(entry.updated);
                 SetDB();
-                browserStorage.set(syncStorage);
                 browser.runtime.sendMessage({ type: "DBUpdate" });
             })
         });
@@ -462,13 +461,14 @@ function AddUnreadBadges() { // adds a badge to user browsers which indicates wh
                 return element.id == profiles[i].href.match(regex.userToIDRegex)[0];
             })
             if (syncStorage.postDB.hasOwnProperty(entry.id)) {
-                if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate")) {
+                if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate") || syncStorage.postDB[entry.id].data.lastImportDate == NaN) {
                     syncStorage.postDB[entry.id].data.lastImportDate = -1;
                 } else {
                     console.log(syncStorage.postDB[entry.id].data.lastImportDate, DateToUnix(entry.last_imported))
                     let lastImportDate = syncStorage.postDB[entry.id].data.lastImportDate;
-                    let hasUnreadPosts = DateToUnix(entry.last_imported) != lastImportDate;
+                    let hasUnreadPosts = DateToUnix(entry.updated) > lastImportDate;
 
+                    console.log("has new posts: " + hasUnreadPosts);
                     if (hasUnreadPosts && !profiles[i].classList.contains("new-posts-user")) {
                         console.warn(DateToUnix(entry.last_imported), lastImportDate)
                         console.log(profiles[i])
@@ -815,7 +815,7 @@ function RestoreImage(element) {
     let postUserID = element.href.match(regex.userToIDRegex)[0];
     let postID = element.href.match(regex.postToIDRegex)[0];
 
-    if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID) && false) {
+    if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
         let entry = tempStorage.postDB[postUserID][postID];
         CreateThumbnail(element, entry.content, entry.type);
     } else {
@@ -875,19 +875,18 @@ function RestoreImage(element) {
 
                 console.log(thumbnail)
 
-                tempStorage.postDB[postUserID] = {};
-                tempStorage.postDB[postUserID][postID] = {};
+                GetSessionStorage();
+                if (!tempStorage.postDB.hasOwnProperty(postUserID)) tempStorage.postDB[postUserID] = {};
+                if (!tempStorage.postDB[postUserID].hasOwnProperty(postID)) tempStorage.postDB[postUserID][postID] = {};
 
                 if (thumbnail.image != undefined) {
-                    GetSessionStorage();
-                    tempStorage.postDB[postUserID][postID] = { type: "image", content: thumbnail.image }
+                    tempStorage.postDB[postUserID][postID] = { type: "img", content: thumbnail.image }
                     SetSessionStorage();
 
-                    CreateThumbnail(element, thumbnail.image, "image");
+                    CreateThumbnail(element, thumbnail.image, "img");
                 }
 
                 else if (thumbnail.video != undefined) {
-                    GetSessionStorage();
                     tempStorage.postDB[postUserID][postID] = { type: "video", content: thumbnail.video }
                     SetSessionStorage();
 
@@ -895,7 +894,6 @@ function RestoreImage(element) {
                 }
 
                 else {
-                    GetSessionStorage();
                     tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
                     SetSessionStorage();
 
@@ -922,7 +920,7 @@ function RequestRestoreImage(element) {
 }
 
 function CreateThumbnail(element, content, type) {
-    if (type == "image" || type == "video") {
+    if (type == "img" || type == "video") {
         //console.log(content)
         if (element.getElementsByClassName("post-card__image-container").length == 0) {
             const textDiv = document.createElement("div");
@@ -1066,12 +1064,12 @@ function GetSessionStorage() {
     tempStorage = JSON.parse(sessionStorage.getItem("cache"));
     if (tempStorage == null) {
         tempStorage = { postDB: {} };
+        SetSessionStorage()
     }
     if (!tempStorage.hasOwnProperty("postDB")) {
         tempStorage.postDB = {}
+        SetSessionStorage()
     }
-    //console.log(sessionStorage)
-    SetSessionStorage()
 }
 
 function RecieveSettingsUpdates() {
@@ -1178,7 +1176,9 @@ function CreateNodeObserver(
 function SendRequest(url) {
     return new Promise((resolve, reject) => {
         let service = url.match(regex.siteRegex)[0];
+        let creatorFile = false;
         if (url == `https://${service}.su/api/v1/creators.txt`) {
+            creatorFile = true;
             GetSessionStorage()
             if (!tempStorage.hasOwnProperty("urls")) {
                 tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
@@ -1196,7 +1196,7 @@ function SendRequest(url) {
                     throw new Error('Network response was not ok');
                 }
                 console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
-                if (url == `https://${service}.su/api/v1/creators.txt` && response.length > 0) {
+                if (creatorFile && response.length > 0) {
                     tempStorage.urls.artists[service].data = response
                     tempStorage.urls.artists[service].date = Date.now()
                 }
