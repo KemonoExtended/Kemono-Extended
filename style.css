@@ -313,3 +313,11 @@
     width: auto;
     border-radius: 5px;
 }
+
+.unread-post {
+    border-style: solid;
+    border-radius: 7px;
+    border-color: yellow;
+    overflow: hidden;
+    border-width: 2.5px;
+}

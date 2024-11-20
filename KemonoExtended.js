@@ -3,7 +3,7 @@ const { session } = browser.storage;
 const browserStorage = browser.storage.local;
 import ProgressBar from 'progressbar.js';
 
-const isMobile = window.matchMedia("(pointer: coarse)").matches;
+const isMobile = window.matchMedia("(pointer: coarse)").matches || true;
 console.log(isMobile)
 
 let settingsDefaults = {
@@ -66,7 +66,6 @@ CreateNodeObserver(
     true,
 );
 
-
 const extensionID = chrome.runtime.id;
 let postID;
 let notificationID = 0;
@@ -75,7 +74,7 @@ let restoredImages = 0;
 // local DB copies
 let syncStorage = {}; // not acually synchronous across devices, just persistent storage
 let tempStorage = {};
-//console.log(tempStorage)
+
 
 FetchDB().then(() => { Main(); });
 
@@ -670,7 +669,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
         cancelButton.style.opacity = 0;
         setTimeout(() => { cancelButton.remove(); }, 200);
         setTimeout(() => {
-            console.log("test");
             downloadIcon.classList = ["download"];
             downloadIcon.style.opacity = 1
             downloadIcon.nextElementSibling.style.opacity = 0;

@@ -18,6 +18,124 @@ let settingsDefaults = {
     swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' },
 }
 
+const regex = {
+    // Regular expressions for ID extraction
+    imageToIDRegex: /(?<=\/data\/\w+\/\w+\/)\w{7}(?=\w+\.\w+)/, // Finds ID in image link
+    postToIDRegex: /(?<=\w+\/user\/[^/]+\/post\/)(\d+)/, // Finds ID in post link
+    userToIDRegex: /(?<=\w+\/user\/)([^/?=]+)/, // Finds ID in user profile link
+
+    // Regular Expressions for ID extraction on Discord servers
+    servertoIDRegex: /(?<=discord\/server\/)\d{8}/, // Finds ID in Discord server URL
+    channelToIDRegex: /(?<=discord\/server\/\d+#)\d{7}/, // Finds channel ID in Discord server URL
+    discordRegex: /(?<=\/data\/\/\w+\/\w+\/)\w{7}/, // Finds image ID in image URL
+
+    // Regular Expressions for URL matching
+    userURLRegex: /\w+\/user\/[^/]+/, // Matches user profile URL pattern
+    postURLRegex: /\w+\/user\/\w+\/post\/\d+/, // Matches post URL pattern
+    otherRegex: /\w+\/(posts|search_hash)/,
+    userBrowserRegex: /\w+\/(artists|favorites)/,
+    discordURLRegex: /\/\w+.\w+\/discord/, // Matches discord server URL pattern
+    siteRegex: /(?<=https:\/\/)\w+/, // Matches the service name from any url
+    serviceRegex: /(?<=https:\/\/\w+\.su\/)\w+/, // Matches the service name from any url
+
+    // Regular Expressions for amount of posts
+    userPostAmountRegex: /(?<=Showing \d+ - \d+ of )(\d+)/, // Finds amount of posts in html
+    getUserLinkFromPostLink: /.+\/user\/[^/]+/, // Finds user link from post link
+
+    // Regular Expressions for API Requests
+    postToApiRegex: /(https:\/\/\w+\.\w+)(.+)/,
+    postContentToImageLinkRegex: /(?<=<img [\w\s"=\\-]+ src=\\?")[\w\.\/\\]+[a-zA-Z]/,
+
+    // misc
+    fileExtensionRegex: /(?<=\.)\w+$/,
+    fileNameRegex: /(?<=f=).+$/,
+    urlExtractionRegex: /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/
+};
+
+let activeMobileDownloads = [];
+
+setTimeout(() => {
+    let thumbnailURL = "https://img.kemono.su/thumbnail/data/40/ed/40edd53bbc7d738c74692acb2cf313c962274e2399677d6dac6d82f627236ae7.jpg"
+    let url = "https://n4.kemono.su/data/6d/ac/6dac5497891515d0bbf76276c87b074ae2adaa44a1a47c3b5b7dbed6182feff1.jpg?f=JVAoY65IoxmZQMuCKihJmz6A.jpeg"
+    console.log("Downloading " + url);
+    MobileDownload(url, (progress) => {
+        console.log(progress)
+    }, () => {
+        let fetchIndex = activeMobileDownloads.findIndex(download => download.url === url);
+        if (fetchIndex !== -1) {
+            activeMobileDownloads.splice(fetchIndex, 1);
+        }
+    }, thumbnailURL).then(response => response.blob())
+        .then(blob => {
+            const responseUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = responseUrl;
+            a.download = url.match(regex.fileNameRegex)[0];
+            a.click();
+            URL.revokeObjectURL(responseUrl);
+            SetDB();
+            browserStorage.set(syncStorage);
+
+        })
+}, 1000)
+
+async function MobileDownload(url, onProgress, onFinish, thumbnailURL) {
+    if (activeMobileDownloads.find((element) => element.url == url) != undefined) return
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    const fetchVar = fetch(url, { signal });
+    activeMobileDownloads.push({ url: url, controller: controller });
+
+    try {
+        const response = await fetchVar;
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const contentLength = response.headers.get('Content-Length');
+        if (!contentLength) {
+            throw new Error('Content-Length response header unavailable');
+        }
+
+        const total = parseInt(contentLength, 10);
+        let loaded = 0;
+
+        const reader = response.body.getReader();
+        const stream = new ReadableStream({
+            start(controller) {
+                function push() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            controller.close();
+                            onFinish();
+                            return;
+                        }
+
+                        loaded += value.byteLength;
+                        onProgress((loaded / total) * 100);
+
+                        controller.enqueue(value);
+                        push();
+                    }).catch(error => {
+                    });
+                }
+
+                push();
+            }
+        });
+
+        return new Response(stream);
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            console.log('Fetch aborted');
+        } else {
+            console.error('Fetch error:', error);
+        }
+    }
+}
+
+
 let syncStorage = {};
 FetchDB();
 
