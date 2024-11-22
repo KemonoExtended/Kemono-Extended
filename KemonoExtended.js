@@ -150,7 +150,7 @@ function Main() {
             }, true);
 
 
-        GetLastPostDate(document.URL.match(regex.siteRegex), document.URL.match(regex.serviceRegex), document.URL.match(regex.userToIDRegex)[0]).then(lastPostDate => {
+        GetLastPostDate(document.URL.match(regex.siteRegex)[0], document.URL.match(regex.serviceRegex)[0], document.URL.match(regex.userToIDRegex)[0]).then(lastPostDate => {
             let postElements = document.getElementsByClassName("post-card__header")
             for (let i = 0; i < postElements; i++) CreateSeenBadge(postElements[i], lastPostDate)
             syncStorage.postDB[userID].data.lastPostDate = lastPostDate
@@ -305,7 +305,7 @@ function CreateSubscribeButton(parentNode) { //Adds subscription button on user 
 
 function GetLastPostDate(site, service, userID) { // returns the last post date of a given user
     return new Promise(resolve => {
-        SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}, 180`).then(response => {
+        SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}`, 180).then(response => {
             response = JSON.parse(response)
             let date = DateToUnix(response[0].added)
             lastPost = date
