@@ -45,37 +45,34 @@ Kemono Extended is a Firefox addon that aims to provide additional functionality
    <summary>
       Restore post thumbnails
    </summary>
-   When a post doesn't have a thumbnail, the addon tries to get an image<br>
-   from the post to set as the thumbnail.<br>
-   If the post doesn't contain images, the addon uses the post itself as the thumbnail.<br>
-   This is limited to one thumbnail every ~1 second because of rate limiting.
+   When a post doesn't have a thumbnail, the addon tries to get an image or video thumbnail<br>
+   from the post to set as the post thumbnail.<br>
+   If the post doesn't contain images, the addon displays the post text.
 </details>
 <details>
    <summary>
       Mark visited posts
    </summary>
-   When you open a post it gets marked as "Read".
+   When you open a post it gets marked as Read.
 </details>
 <details>
    <summary>
-      Read all button
+      Unread posts
    </summary>
-   Adds a "Read all" button to creator pages.<br>
-   When pressed it marks every current post as "Seen".<br>
-   This can be undone by pressing the button again.
+   Adds a yellow border around new posts on user pages that you have visited previously.
 </details>
 <details>
    <summary>
       Subscriptions - Desktop only
    </summary>
-   When you subscribe to a creator on their creator page, the addon periodically checks if they have new posts.
+   When you subscribe to a creator on their creator page, the addon periodically checks if they have new posts.<br>
    If the addon finds new posts, it notifies you with a notification.
 </details>
 <details>
    <summary>
       Mark unread creators
    </summary>
-   The addon marks favorited artists on your favorites pages if they have new posts.
+   Marks favorited artists on your favorites pages if they have new posts.
 </details>
 <br><br>
 
