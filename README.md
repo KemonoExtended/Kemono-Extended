@@ -18,7 +18,7 @@ Kemono Extended is a Firefox addon that aims to provide additional functionality
    </summary>
    Only one downloads is ever active at the same time. <br>
    Images are downloaded in the order that you clicked the download buttons.<br>
-   Downloads are handeled in the background so you can leave the site<br>
+   Downloads are handled in the background so you can leave the site<br>
    and the downloads will continue in the background.
 </details>
 <details>
@@ -26,7 +26,7 @@ Kemono Extended is a Firefox addon that aims to provide additional functionality
       Mobile downloads - Mobile only
    </summary>
    Because of restrictions downloads on mobile devices are not sequential.<br>
-   Downloads also dont work in the background.<br>
+   Downloads also don't work in the background.<br>
    This means that you need to stay on the same page until you get the download popup.
 </details>
 <details>
@@ -75,7 +75,7 @@ Kemono Extended is a Firefox addon that aims to provide additional functionality
    <summary>
       Mark unread creators
    </summary>
-   The addon marks favourited aritists on your favourites pages if they have new posts.
+   The addon marks favorited artists on your favorites pages if they have new posts.
 </details>
 <br><br>
 
