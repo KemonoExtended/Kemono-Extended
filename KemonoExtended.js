@@ -9,9 +9,8 @@ console.log(isMobile)
 let settingsDefaults = {
     wheelTiltFF: { value: true, pc: true, mobile: false, description: "Mouse wheel navigation", explanation: 'Use tilting of the mouse wheel for navigation.' },
     readPostsFF: { value: true, pc: true, mobile: true, description: "Mark visited posts", explanation: 'Add a "read" badge to visited posts.' },
-    readAllFF: { value: true, pc: true, mobile: true, description: "Read all button", explanation: 'Add a "read all" button to mark all posts as "seen".' },
     downloaderFF: { value: true, pc: true, mobile: true, description: "Image downloader", explanation: 'Add a download button to the corner of images.' },
-    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread dots in favorites", explanation: 'Highlight users whith new posts in your favorites.' },
+    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread dots in favorites", explanation: 'Highlight users with new posts in your favorites.' },
     restoreThumbnailsFF: { value: true, pc: true, mobile: true, description: "Restore post thumbnails", explanation: 'Restores thumbnails of posts when no thumbnail exists. If the post contains no images, the content of the post itself is displayed instead.' },
     subscriptionsFF: { value: true, pc: true, mobile: false, description: "Add Subscriptions", explanation: 'Enables the subscription system. this adds a "subscribe" button to user pages. It also allows the extension to check for new posts in the background and to notify you of them.' },
     swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' },
@@ -24,7 +23,7 @@ const regex = {
     userToIDRegex: /(?<=\w+\/user\/)([^/?=]+)/, // Finds ID in user profile link
 
     // Regular Expressions for ID extraction on Discord servers
-    servertoIDRegex: /(?<=discord\/server\/)\d{8}/, // Finds ID in Discord server URL
+    serverToIDRegex: /(?<=discord\/server\/)\d{8}/, // Finds ID in Discord server URL
     channelToIDRegex: /(?<=discord\/server\/\d+#)\d{7}/, // Finds channel ID in Discord server URL
     discordRegex: /(?<=\/data\/\/\w+\/\w+\/)\w{7}/, // Finds image ID in image URL
 
@@ -48,7 +47,8 @@ const regex = {
     // misc
     fileExtensionRegex: /(?<=\.)\w+$/,
     fileNameRegex: /(?<=f=).+$/,
-    urlExtractionRegex: /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/
+    urlExtractionRegex: /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/,
+    urlToPageRegex: /(?<=o=)\d+/
 };
 
 let activeMobileDownloads = [];
@@ -71,16 +71,17 @@ const extensionID = chrome.runtime.id;
 let postID;
 let notificationID = 0;
 let restoredImages = 0;
+let lastPost = Number.MAX_SAFE_INTEGER;
 
 // local DB copies
-let syncStorage = {}; // not acually synchronous across devices, just persistent storage
+let syncStorage = {}; // not actually synchronous across devices, just persistent storage
 let tempStorage = {};
 //console.log(tempStorage)
 
 FetchDB().then(() => { Main(); });
 
 function Main() {
-    RecieveSettingsUpdates();
+    ReceiveSettingsUpdates();
     AddMouseTiltListener();
     if (isMobile && syncStorage.settings.swipeNavigationFF.value) {
         SwipeNavigation()
@@ -124,6 +125,16 @@ function Main() {
 
     // if URL is a user page
     else if (regex.userURLRegex.test(document.URL)) {
+        let userID = document.URL.match(regex.userToIDRegex)[0]
+        if (!syncStorage.postDB.hasOwnProperty(userID)) {
+            syncStorage.postDB[userID] = {}
+        }
+        if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
+            syncStorage.postDB[userID].data = {}
+        }
+        if (syncStorage.postDB[userID].data.lastPostDate !== undefined) {
+            lastPost = syncStorage.postDB[userID].data.lastPostDate
+        }
         CreateNodeObserver(
             (element) => { return element.classList.contains("user-header__actions"); },
             (element) => {
@@ -132,19 +143,29 @@ function Main() {
                     CreateSubscribeButton(element);
                     element.parentElement.parentElement.style.maxWidth = "800px";
                 }
-                CreateReadAllButton(element);
                 let elements = element.children;
                 for (let i = 0; i < elements.length; i++) {
                     elements[i].style = "margin-right: 0px;";
                 }
             }, true);
 
+
+        GetLastPostDate(document.URL.match(regex.siteRegex), document.URL.match(regex.serviceRegex), document.URL.match(regex.userToIDRegex)[0]).then(lastPostDate => {
+            let postElements = document.getElementsByClassName("post-card__header")
+            for (let i = 0; i < postElements; i++) CreateSeenBadge(postElements[i], lastPostDate)
+            syncStorage.postDB[userID].data.lastPostDate = lastPostDate
+            SetDB()
+        })
+
+
         CreateNodeObserver(
             (element) => { return element.classList.contains("post-card__header"); },
-            (element) => { CreateSeenBadge(element); }
+            (element) => { CreateSeenBadge(element, lastPost); }
         );
 
-        const userID = document.URL.match(regex.userToIDRegex)[0];
+        let postElements = document.getElementsByClassName("post-card__header")
+        for (let i = 0; i < postElements; i++) CreateSeenBadge(postElements[i], lastPost)
+
 
         if (!syncStorage.postDB.hasOwnProperty(userID)) {
             syncStorage.postDB[userID] = {};
@@ -158,7 +179,7 @@ function Main() {
         const service = document.URL.match(regex.siteRegex)[0];
         const requestURL = `https://${service}.su/api/v1/creators.txt`
         console.log(requestURL)
-        SendRequest(requestURL).then((dataString) => {
+        SendRequest(requestURL, 300).then((dataString) => {
             let data = JSON.parse(dataString);
             console.log(data, dataString)
             let entry = data.find((element) => {
@@ -168,7 +189,7 @@ function Main() {
                 if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
                     syncStorage.postDB[userID].data = {};
                 }
-                syncStorage.postDB[userID].data.lastImportDate = DateToUnix(entry.updated);
+                syncStorage.postDB[userID].data.lastImportDate = entry.updated * 1000;
                 SetDB();
                 browser.runtime.sendMessage({ type: "DBUpdate" });
             })
@@ -181,15 +202,7 @@ function Main() {
 
     // If URL is another page with posts
     else if (regex.otherRegex.test(document.URL)) {
-
-        CreateNodeObserver(
-            (element) => { return element.classList.contains("post-card__header"); },
-            (element) => { CreateSeenBadge(element); }
-        );
-
-        RestoreImages();
-
-        RegularUpdatePosts()
+        RestoreImagesOLD();
     }
 
     // If URL is a user browser
@@ -256,7 +269,7 @@ function CreateSubscribeButton(parentNode) { //Adds subscription button on user 
             subscribeButton.classList.remove("subscribed");
             subscribeButton.textContent = "Subscribe";
         } else {
-            SendNotification("Subscriped to " + name, profilePictureURL)
+            SendNotification("Subscribed to " + name, profilePictureURL)
             let site = document.URL.match(regex.siteRegex)[0];
             let service = document.URL.match(regex.serviceRegex)[0];
             console.log(name)
@@ -271,7 +284,7 @@ function CreateSubscribeButton(parentNode) { //Adds subscription button on user 
             })
 
             const apiURL = `https://${site}.su/api/v1/${service}/user/${userID}`;
-            SendRequest(apiURL).then((dataString) => {
+            SendRequest(apiURL, 300).then((dataString) => {
                 const request = JSON.parse(dataString);
                 if (request != null) {
                     FetchDB().then(() => {
@@ -290,99 +303,18 @@ function CreateSubscribeButton(parentNode) { //Adds subscription button on user 
     });
 }
 
-function CreateReadAllButton(parentNode) { //Adds subscription button on user pages
-    parentNode.style.display = "flex"
-    let readAllExisting = document.getElementById("readAllButton");
-    if (readAllExisting) {
-        // console.log("readAll button already exists, value = " + syncStorage.settings.readAllFF.value);
-        if (syncStorage.settings.readAllFF.value) {
-            readAllExisting.style.display = "block";
-        }
-        else {
-            readAllExisting.style.display = "none";
-        }
-        return;
-    }
-    const readAllButton = document.createElement("button");
-    let userID = document.URL.match(regex.userToIDRegex)[0];
-    if (!syncStorage.postDB.hasOwnProperty(userID)) {
-        syncStorage.postDB[userID] = {};
-    }
-    if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
-        syncStorage.postDB[userID].data = {};
-    }
-    if (!syncStorage.postDB[userID].data.hasOwnProperty("readAllDate")) {
-        syncStorage.postDB[userID].data.readAllDate = -1;
-    }
-    if (!syncStorage.postDB[userID].data.hasOwnProperty("lastPostAmount")) {
-        syncStorage.postDB[userID].data.lastPostAmount = -1;
-    }
-    let postTags = document.getElementsByTagName("small")
-    let postAmount;
-
-    if (postTags == undefined || postTags.length == 0) {
-        postAmount = document.getElementsByClassName("post-card post-card--preview").length;
-    } else {
-        postAmount = parseInt(postTags[0].textContent.match(regex.userPostAmountRegex)[0]);
-    }
-
-    // console.log(syncStorage.postDB[userID].data.lastPostAmount + " " + postAmount)
-    if (syncStorage.postDB[userID].data.readAllDate == -1 || syncStorage.postDB[userID].data.lastPostAmount != postAmount) {
-        readAllButton.classList.add("read-all");
-        readAllButton.textContent = "Read All";
-        readAllButton.id = "readAllButton";
-    } else {
-        readAllButton.classList.add("read-all");
-        readAllButton.classList.add("undo");
-        readAllButton.textContent = "Undo";
-    }
-    if (syncStorage.settings.readAllFF.value) {
-        parentNode.appendChild(readAllButton);
-    }
-
-    SetDB();
-    browserStorage.set(syncStorage);
-    readAllButton.addEventListener("click", function () {
-        ReadAll();
-    });
+function GetLastPostDate(site, service, userID) { // returns the last post date of a given user
+    return new Promise(resolve => {
+        SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}, 180`).then(response => {
+            response = JSON.parse(response)
+            let date = DateToUnix(response[0].added)
+            lastPost = date
+            resolve(lastPost)
+        })
+    })
 }
 
-function ReadAll() { //Sets a timestamp to the last read all date to now
-    let userID = document.URL.match(regex.userToIDRegex)[0];
-    let readAllButton = document.getElementsByClassName("read-all")[0];
-    if (syncStorage.postDB[userID].data.readAllDate == -1 || !syncStorage.postDB[userID].data.hasOwnProperty("readAllDate")) {
-        SendNotification("Read all posts")
-        syncStorage.postDB[userID].data.readAllDate = Date.now();
-        let postTags = document.getElementsByTagName("small")
-        let lastPostAmount;
-
-        if (postTags == undefined || postTags.length == 0) {
-            lastPostAmount = document.getElementsByClassName("post-card post-card--preview").length;
-        } else {
-            lastPostAmount = parseInt(postTags[0].textContent.match(regex.userPostAmountRegex)[0]);
-        }
-        console.log(lastPostAmount);
-        syncStorage.postDB[userID].data.lastPostAmount = lastPostAmount;
-        SetDB();
-        browserStorage.set(syncStorage);
-        console.log(syncStorage)
-        readAllButton.classList.add("undo");
-        readAllButton.textContent = "Undo";
-    } else {
-        SendNotification("Unread all posts")
-        syncStorage.postDB[userID].data.readAllDate = -1;
-        SetDB();
-        browserStorage.set(syncStorage);
-        readAllButton.classList.remove("undo");
-        readAllButton.textContent = "Read All";
-    }
-    let postElements = document.getElementsByClassName("post-card__header");
-    for (let i = 0; i < postElements.length; i++) {
-        CreateSeenBadge(postElements[i]);
-    }
-}
-
-function CreateSeenBadge(postElement) { //Creates a badge and style for posts that have been seen or read previously
+function CreateSeenBadge(postElement, lastPostDate) { //Creates a badge and style for posts that have been seen or read previously
     // console.log(postElement)
     if (!syncStorage.settings.readPostsFF.value) {
         return;
@@ -391,24 +323,14 @@ function CreateSeenBadge(postElement) { //Creates a badge and style for posts th
     if (!syncStorage.postDB.hasOwnProperty(userID)) {
         syncStorage.postDB[userID] = {};
     }
-
-    let readAllUnix = -1;
     if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
         syncStorage.postDB[userID].data = {};
-    }
-    else if (syncStorage.postDB[userID].data.hasOwnProperty("readAllDate")) {
-        readAllUnix = syncStorage.postDB[userID].data.readAllDate;
     }
     const postID = postElement.parentElement.href.match(regex.postToIDRegex)[0];
     let postDate = postElement.parentElement.getElementsByClassName("timestamp")[0].dateTime;
     let postUnix = DateToUnix(postDate);
-    let readAll = false;
-    if (readAllUnix != -1) {
-        if (readAllUnix >= postUnix) {
-            readAll = true;
-        }
-    }
-    if (syncStorage.postDB[userID].hasOwnProperty(postID) || readAll) {
+    let newPost = lastPostDate < postUnix
+    if (syncStorage.postDB[userID].hasOwnProperty(postID) || newPost) {
         console.log(postElement.parentElement.getElementsByClassName("post-card__image-container"));
         if (postElement.parentElement.getElementsByClassName("post-card__image-container").length == 0) {
             let textDiv = document.createElement("div");
@@ -422,19 +344,21 @@ function CreateSeenBadge(postElement) { //Creates a badge and style for posts th
             postElement.parentElement.children[1].classList.add("seen-post");
         }
         let seenBadges = postElement.parentElement.getElementsByClassName("seen-badge");
-        if (seenBadges.length == 0) {
-            let seenBadge = document.createElement("p");
-            seenBadge.classList.add("seen-badge");
-            if (syncStorage.postDB[userID].hasOwnProperty(postID)) {
+        if (syncStorage.postDB[userID].hasOwnProperty(postID)) {
+            postElement.parentElement.style = "border-style: solid; border-radius: 0px; border-color: rgba(0, 0, 0, 0); border-width: 0px;  transition: all 0.1s ease"
+            if (seenBadges.length == 0) {
+                let seenBadge = document.createElement("p");
+                seenBadge.classList.add("seen-badge");
                 seenBadge.textContent = "Read";
+                postElement.parentElement.appendChild(seenBadge);
             } else {
-                seenBadge.textContent = "Seen";
+                seenBadges[0].textContent = "Read";
             }
-            postElement.parentElement.appendChild(seenBadge);
-        } else if (syncStorage.postDB[userID].hasOwnProperty(postID)) {
-            seenBadges[0].textContent = "Read";
         }
-    } else if (postElement.parentElement.getElementsByClassName("seen-badge").length > 0) {
+        else {
+            postElement.parentElement.style = "border-style: solid; border-radius: 7px; border-color: yellow; overflow: hidden; border-width: 2px; transition: border-width 0.5s ease"
+        }
+    } else {
         postElement.nextElementSibling.classList.remove("seen-post");
         let seenBadge = postElement.parentElement.getElementsByClassName("seen-badge");
         if (seenBadge.length > 0) {
@@ -443,16 +367,16 @@ function CreateSeenBadge(postElement) { //Creates a badge and style for posts th
     }
 }
 
-function AddUnreadBadges() { // adds a badge to user browsers which indicates which of the users, if favorited, has posts that are new
+function AddUnreadBadges() { // adds a badge to user browsers which indicates which of the users, has posts that are new
     if (!syncStorage.settings.unreadDotFF.value) {
         return;
     }
     GetSessionStorage()
-    console.log("tempstorage: " + tempStorage)
+    console.log("tempStorage: " + tempStorage)
 
     let service = document.location.href.match(regex.siteRegex)[0];
     console.log(service)
-    SendRequest(`https://${service}.su/api/v1/creators.txt`).then((dataString) => {
+    SendRequest(`https://${service}.su/api/v1/creators.txt, 300`).then((dataString) => {
         let data = JSON.parse(dataString);
         console.log(data)
         let profiles = document.getElementsByClassName("user-card")
@@ -535,7 +459,7 @@ function CreateDownloadButton(element, attribute, attributeRegex) {
         return;
     }
     let imageID = element[attribute].match(attributeRegex)[0];
-    let imageURL = element.href; // colletion of links for full size images
+    let imageURL = element.href; // collection of links for full size images
     let thumbnailURL = element.children[0].src;
     let downloadDiv = document.createElement("div"); // download button creation
     downloadDiv.classList.add("download-div");
@@ -675,8 +599,8 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
             downloadIcon.style.opacity = 1
             downloadIcon.nextElementSibling.style.opacity = 0;
             setTimeout(() => {
-                let ssindex = statusCircles.findIndex((element) => element.url == url)
-                statusCircles.splice(ssindex, 1);
+                let ssIndex = statusCircles.findIndex((element) => element.url == url)
+                statusCircles.splice(ssIndex, 1);
                 statusCircle.destroy();
             }, 100);
         }, 500)
@@ -793,115 +717,123 @@ function RestoreImages() {
         return
     }
     GetSessionStorage();
-    CreateNodeObserver(
-        (element) => {
-            return element.tagName == "A" &&
-                element.hasAttribute("href") &&
-                element.parentElement.classList.contains("post-card--preview") &&
-                element.getElementsByClassName("post-card__image").length == 0
-        },
-        (element) => {
-            RestoreImage(element)
+    if (window.readyState === true) {
+        let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
+        if(elements.length > 0) RestoreThumbnails(elements)
+    }
+    else {
+        window.onload = () => {
+            let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
+            if(elements.length > 0) RestoreThumbnails(elements)
         }
-    )
-    let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
-    elements.forEach(element => {
-        RestoreImage(element)
-    });
+    }
 }
 
-function RestoreImage(element) {
-    // console.log(element)
-    let postUserID = element.href.match(regex.userToIDRegex)[0];
-    let postID = element.href.match(regex.postToIDRegex)[0];
+function RestoreThumbnails(elements) {
+    console.log(elements)
+    let site = document.URL.match(regex.siteRegex)[0];
+    let service = document.URL.match(regex.serviceRegex)[0];
+    let page = document.URL.match(regex.urlToPageRegex)
+    if (page !== null) page = page[0]
+    else page = 0;
+    let userID = document.URL.match(regex.userToIDRegex)[0]
+    SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}?o=${page}, 600`).then(posts => {
+        posts = JSON.parse(posts)
+        tempStorage = { postDB: {}, urls: {} };
+        SetSessionStorage()
+        for (let i = 0; i < elements.length; i++) {
+            let element = elements[i];
+            let postID = element.href.match(regex.postToIDRegex)[0];
 
-    if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
-        let entry = tempStorage.postDB[postUserID][postID];
-        CreateThumbnail(element, entry.content, entry.type);
-    } else {
-        restoredImages++;
-        setTimeout(() => {
-            RequestRestoreImage(element).then((data) => {
-
-                let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
-                let videoFormats = ["mp4", "webm", "mkv", "avi", "m4v"]
-                let thumbnail = { image: undefined, video: undefined };
-
-
-                try {
-                    console.log(element, data[0].content)
-                    const parser = new DOMParser();
-                    let contentDOM = parser.parseFromString(data[0].content, 'text/html')
-                    let imageElements = Array.from(contentDOM.all).filter(element3 => element3.tagName == "IMG" || element3.tagName == "VIDEO")
-
-                    if (imageElements.length > 0) {
-                        thumbnail.image = imageElements.find((element) => imageFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
-
-                        if (thumbnail.image == undefined) {
-                            thumbnail.video = imageElements.find((element) => videoFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
-                        }
-                    }
-                } catch { }
-
-
-                if (thumbnail.image == undefined) {
-                    try {
-                        let fileExtension = data[0].file.path.match(regex.fileExtensionRegex)[0]
-                        if (imageFormats.includes(fileExtension)) {
-                            thumbnail.image = [data[0].file.path]
-
-                        }
-                        if (thumbnail.image == undefined && thumbnail.video == undefined) {
-                            if (videoFormats.includes(fileExtension)) {
-                                thumbnail.video = [data[0].file.path]
-                            }
-                        }
-                    } catch { };
+            if (tempStorage.postDB.hasOwnProperty(userID) && tempStorage.postDB[userID].hasOwnProperty(postID)) {
+                let entry = tempStorage.postDB[userID][postID];
+                CreateThumbnail(element, entry.content, entry.type);
+            } else {
+                let data = posts.find((element) => element.id == postID)
+                if (data.length < 1) {
+                    console.error("post not found. response: " + response)
                 }
+                else {
+                    let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
+                    let videoFormats = ["mp4", "webm", "mkv", "avi", "m4v"]
+                    let thumbnail = { image: undefined, video: undefined };
 
 
-                if (thumbnail.image == undefined)
                     try {
-                        thumbnail.image = data[0].attachments.find((element) =>
-                            imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                            .map(element => element.path)
+                        console.log(element, data.content)
+                        const parser = new DOMParser();
+                        let contentDOM = parser.parseFromString(data.content, 'text/html')
+                        let imageElements = Array.from(contentDOM.all).filter(element3 => element3.tagName == "IMG" || element3.tagName == "VIDEO")
 
-                        if (thumbnail.image == undefined && thumbnail.video == undefined) {
-                            thumbnail.video = data[0].attachments.find((element) =>
-                                videoFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                                .map(element => element.path)
+                        if (imageElements.length > 0) {
+                            thumbnail.image = imageElements.find((element) => imageFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
+
+                            if (thumbnail.image == undefined) {
+                                thumbnail.video = imageElements.find((element) => videoFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
+                            }
                         }
                     } catch { }
 
-                console.log(thumbnail)
 
-                GetSessionStorage();
-                if (!tempStorage.postDB.hasOwnProperty(postUserID)) tempStorage.postDB[postUserID] = {};
-                if (!tempStorage.postDB[postUserID].hasOwnProperty(postID)) tempStorage.postDB[postUserID][postID] = {};
+                    if (thumbnail.image == undefined) {
+                        try {
+                            let fileExtension = data.file.path.match(regex.fileExtensionRegex)[0]
+                            if (imageFormats.includes(fileExtension)) {
+                                thumbnail.image = [data.file.path]
 
-                if (thumbnail.image != undefined) {
-                    tempStorage.postDB[postUserID][postID] = { type: "img", content: thumbnail.image }
-                    SetSessionStorage();
+                            }
+                            if (thumbnail.image == undefined && thumbnail.video == undefined) {
+                                if (videoFormats.includes(fileExtension)) {
+                                    thumbnail.video = [data.file.path]
+                                }
+                            }
+                        } catch { };
+                    }
 
-                    CreateThumbnail(element, thumbnail.image, "img");
+
+                    if (thumbnail.image == undefined)
+                        try {
+                            thumbnail.image = data.attachments.find((element) =>
+                                imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                                .map(element => element.path)
+
+                            if (thumbnail.image == undefined && thumbnail.video == undefined) {
+                                thumbnail.video = data.attachments.find((element) =>
+                                    videoFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                                    .map(element => element.path)
+                            }
+                        } catch { }
+
+                    console.log(thumbnail)
+
+                    GetSessionStorage();
+                    if (!tempStorage.postDB.hasOwnProperty(userID)) tempStorage.postDB[userID] = {};
+                    if (!tempStorage.postDB[userID].hasOwnProperty(postID)) tempStorage.postDB[userID][postID] = {};
+
+                    if (thumbnail.image != undefined) {
+                        tempStorage.postDB[userID][postID] = { type: "img", content: thumbnail.image }
+                        SetSessionStorage();
+
+                        CreateThumbnail(element, thumbnail.image, "img");
+                    }
+
+                    else if (thumbnail.video != undefined) {
+                        tempStorage.postDB[userID][postID] = { type: "video", content: thumbnail.video }
+                        SetSessionStorage();
+
+                        CreateThumbnail(element, thumbnail.video, "video");
+                    }
+
+                    else {
+                        tempStorage.postDB[userID][postID] = { type: "text", content: data }
+                        SetSessionStorage();
+
+                        CreateThumbnail(element, data, "text");
+                    }
                 }
-
-                else if (thumbnail.video != undefined) {
-                    tempStorage.postDB[postUserID][postID] = { type: "video", content: thumbnail.video }
-                    SetSessionStorage();
-
-                    CreateThumbnail(element, thumbnail.video, "video");
-                }
-
-                else {
-                    tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
-                    SetSessionStorage();
-
-                    CreateThumbnail(element, data[0], "text");
-                }
-            })
-        }, restoredImages * 800)
-    }
+            }
+        }
+    })
 }
 
 function RequestRestoreImage(element) {
@@ -909,7 +841,7 @@ function RequestRestoreImage(element) {
         const href = element.href
         const urlMatches = href.match(regex.postToApiRegex);
         const apiURL = urlMatches[1] + "/api/v1" + urlMatches[2];
-        SendRequest(apiURL).then((data) => {
+        SendRequest(apiURL, 300).then((data) => {
             const request = JSON.parse(data);
             if (request != null) {
                 resolve([request, apiURL])
@@ -970,6 +902,78 @@ function CreateThumbnail(element, content, type) {
     }
 }
 
+function RestoreImagesOLD() {
+    if (!syncStorage.settings.restoreThumbnailsFF.value) {
+        return
+    }
+    let restoredImages = 0;
+
+    CreateNodeObserver(
+        (element) => {
+            return element.tagName == "A" &&
+                element.hasAttribute("href") &&
+                element.parentElement.classList.contains("post-card--preview") &&
+                element.getElementsByClassName("post-card__image").length == 0
+        },
+        (element) => {
+            let postUserID = element.href.match(regex.postToIDRegex)[0];
+            let postID = element.href.match(regex.postToIDRegex)[0];
+
+            if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
+                let entry = tempStorage.postDB[postUserID][postID];
+                CreateThumbnail(element, entry.content, entry.type);
+            } else {
+                restoredImages++;
+                setTimeout(() => {
+                    RequestRestoreImage(element).then((data) => {
+
+                        let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
+                        let contentLinks;
+                        try {
+                            console.log(element, data[0].content)
+                            contentLinks = data[0].content.match(regex.postContentToImageLinkRegex)
+                                .filter((element) => { console.log(element, element.match(regex.fileExtensionRegex)[0]); return imageFormats.includes(element.match(regex.fileExtensionRegex)[0]) })
+                        } catch { }
+
+                        let attachmentLinks;
+                        try {
+                            attachmentLinks = data[0].attachments.filter((element) =>
+                                imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                                .map(element => element.path)
+                        } catch { }
+                        console.log(attachmentLinks, contentLinks)
+
+                        let imageLinks = [];
+                        if (attachmentLinks != undefined && attachmentLinks.length > 0) {
+                            imageLinks = attachmentLinks
+                        } else if (contentLinks != undefined && contentLinks.length > 0) {
+                            imageLinks = contentLinks
+                        }
+
+                        if (!tempStorage.postDB.hasOwnProperty(postUserID)) {
+                            tempStorage.postDB[postUserID] = {}
+                        }
+
+                        if (imageLinks.length > 0) {
+                            CreateThumbnail(element, imageLinks[0], "image");
+                            console.log(imageLinks[0])
+
+                            tempStorage.postDB[postUserID][postID] = { type: "image", content: imageLinks[0] }
+                        } else {
+                            CreateThumbnail(element, data[0], "text");
+
+                            tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
+                        }
+                        sessionStorage.setItem("cache", tempStorage)
+                        SetSessionStorage();
+                    })
+                }, restoredImages * 800)
+            }
+        }
+    )
+    GetSessionStorage();
+}
+
 function RegularUpdatePosts() {
     browser.runtime.onMessage.addListener((request) => {
         if (request.type == "DBUpdate") {
@@ -977,7 +981,7 @@ function RegularUpdatePosts() {
                 console.log(syncStorage)
                 const postElements = document.getElementsByClassName("post-card__header");
                 for (let i = 0; i < postElements.length; i++) {
-                    CreateSeenBadge(postElements[i]);
+                    CreateSeenBadge(postElements[i], lastPost);
                 }
             });
         }
@@ -989,7 +993,7 @@ function RegularUpdatePosts() {
                 if (lastDBUpdateOld != syncStorage.lastDBUpdate) {
                     const postElements = document.getElementsByClassName("post-card__header");
                     for (let i = 0; i < postElements.length; i++) {
-                        CreateSeenBadge(postElements[i]);
+                        CreateSeenBadge(postElements[i], lastPost);
                     }
                 }
             });
@@ -1072,7 +1076,7 @@ function GetSessionStorage() {
     }
 }
 
-function RecieveSettingsUpdates() {
+function ReceiveSettingsUpdates() {
     browser.runtime.onMessage.addListener((request) => {
         if (request.type == "settingsUpdate") {
             FetchDB().then(() => {
@@ -1095,11 +1099,8 @@ function RecieveSettingsUpdates() {
                     }
                     let posts = document.getElementsByClassName("post-card__header")
                     for (let i = 0; i < posts.length; i++) {
-                        CreateSeenBadge(posts[i]);
+                        CreateSeenBadge(posts[i], lastPost);
                     }
-                }
-                else if (request.setting == "readAllFF") {
-                    CreateReadAllButton();
                 }
                 else if (request.setting == "downloaderFF") {
                     if (!request.value) {
@@ -1173,36 +1174,44 @@ function CreateNodeObserver(
     observer.observe(node, { childList: true, subtree: true });
 }
 
-function SendRequest(url) {
+function SendRequest(url, lifetimeS = 0) {
     return new Promise((resolve, reject) => {
-        let service = url.match(regex.siteRegex)[0];
-        let creatorFile = false;
-        if (url == `https://${service}.su/api/v1/creators.txt`) {
-            creatorFile = true;
-            GetSessionStorage()
-            if (!tempStorage.hasOwnProperty("urls")) {
-                tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
-                SetSessionStorage()
-            }
-            else if (Date.now() - tempStorage.urls.artists[service].date < 0) { // update every 10 minutes
-                resolve(tempStorage.urls.artists[service].data)
+        GetSessionStorage()
+        if (!tempStorage.hasOwnProperty("urls")) {
+            tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
+            SetSessionStorage()
+        }
+        else if (tempStorage.urls.hasOwnProperty(url)) {
+            if (Date.now() - tempStorage.urls[url].date <= tempStorage.urls[url].lifetime * 1000) { // update every 10 minutes
+                console.log("retrieving cached data from " + url)
+                resolve(tempStorage.urls[url].data)
             }
         }
         console.log("Sending request to " + url);
         let before = Date.now();
-        fetch(url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
-                if (creatorFile && response.length > 0) {
-                    tempStorage.urls.artists[service].data = response
-                    tempStorage.urls.artists[service].date = Date.now()
+        fetch(url).then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
+            if (lifetimeS > 0 && response.length > 0) {
+                tempStorage.urls[url] = {
+                    data: response,
+                    date: Date.now(),
+                    lifetime: lifetimeS
                 }
                 SetSessionStorage()
-                resolve(response.text());
-            })
+                setTimeout(() => {
+                    GetSessionStorage()
+                    if (tempStorage.hasOwnProperty(url)) {
+                        delete tempStorage[url]
+                        SetSessionStorage()
+                    }
+                }, (lifetimeS * 1000) + 1000);
+            }
+            SetSessionStorage()
+            resolve(response.text());
+        })
             .catch(error => {
                 // Handle errors
                 console.error('Error fetching HTML:', error);

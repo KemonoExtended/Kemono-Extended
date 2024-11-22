@@ -7,9 +7,8 @@ console.clear();
 let settingsDefaults = {
     wheelTiltFF: { value: true, pc: true, mobile: false, description: "Mouse wheel navigation", explanation: 'Use tilting of the mouse wheel for navigation.' },
     readPostsFF: { value: true, pc: true, mobile: true, description: "Mark visited posts", explanation: 'Add a "read" badge to visited posts.' },
-    readAllFF: { value: true, pc: true, mobile: true, description: "Read all button", explanation: 'Add a "read all" button to mark all posts as "seen".' },
     downloaderFF: { value: true, pc: true, mobile: true, description: "Image downloader", explanation: 'Add a download button to the corner of images.' },
-    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread dots in favorites", explanation: 'Highlight users whith new posts in your favorites.' },
+    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread dots in favorites", explanation: 'Highlight users with new posts in your favorites.' },
     restoreThumbnailsFF: { value: true, pc: true, mobile: true, description: "Restore post thumbnails", explanation: 'Restores thumbnails of posts when no thumbnail exists. If the post contains no images, the content of the post itself is displayed instead.' },
     subscriptionsFF: { value: true, pc: true, mobile: false, description: "Add Subscriptions", explanation: 'Enables the subscription system. this adds a "subscribe" button to user pages. It also allows the extension to check for new posts in the background and to notify you of them.' },
     swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' },
@@ -94,7 +93,7 @@ function CreateSettingsEntries(settingsDiv) {
                 if (!locked) {
                     CheckBox(key)
                 } else {
-                    SendNotification(`Not availible on ${isMobile ? "mobile" : "desktop"}.`)
+                    SendNotification(`Not available on ${isMobile ? "mobile" : "desktop"}.`)
                 }
             })
             document.getElementById(key + "_helpDiv").addEventListener("click", (event) => {
