@@ -47,8 +47,9 @@ const regex = {
     // misc
     fileExtensionRegex: /(?<=\.)\w+$/,
     fileNameRegex: /(?<=f=).+$/,
-    urlExtractionRegex: /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/,
-    urlToPageRegex: /(?<=o=)\d+/
+    urlExtractionRegex: /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/, // Extracts URLs from strings
+    urlToPageRegex: /(?<=o=)\d+/, // Gets the page number from the url
+    searchRequestRegex: /\?.*q=[^&]/ // Checks wether there is a search query active
 };
 
 let activeMobileDownloads = [];
@@ -67,11 +68,10 @@ CreateNodeObserver(
 );
 
 
-const extensionID = chrome.runtime.id;
 let postID;
 let notificationID = 0;
-let restoredImages = 0;
 let lastPost = Number.MAX_SAFE_INTEGER;
+let version = "2.0"
 
 // local DB copies
 let syncStorage = {}; // not actually synchronous across devices, just persistent storage
@@ -81,6 +81,11 @@ let tempStorage = {};
 FetchDB().then(() => { Main(); });
 
 function Main() {
+    GetSessionStorage()
+    if (!tempStorage.hasOwnProperty("version") || tempStorage.version != version) {
+        tempStorage = { postDB: {}, urls: {}, version: version };
+        SetSessionStorage()
+    }
     ReceiveSettingsUpdates();
     AddMouseTiltListener();
     if (isMobile && syncStorage.settings.swipeNavigationFF.value) {
@@ -195,7 +200,12 @@ function Main() {
             })
         });
 
-        RestoreImages();
+        if (regex.searchRequestRegex.test(document.URL)) {
+            RestoreImagesOLD()
+        }
+        else {
+            RestoreImages();
+        }
 
         RegularUpdatePosts()
     }
@@ -719,12 +729,12 @@ function RestoreImages() {
     GetSessionStorage();
     if (window.readyState === true) {
         let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
-        if(elements.length > 0) RestoreThumbnails(elements)
+        if (elements.length > 0) RestoreThumbnails(elements)
     }
     else {
         window.onload = () => {
             let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
-            if(elements.length > 0) RestoreThumbnails(elements)
+            if (elements.length > 0) RestoreThumbnails(elements)
         }
     }
 }
@@ -733,13 +743,12 @@ function RestoreThumbnails(elements) {
     console.log(elements)
     let site = document.URL.match(regex.siteRegex)[0];
     let service = document.URL.match(regex.serviceRegex)[0];
-    let page = document.URL.match(regex.urlToPageRegex)
-    if (page !== null) page = page[0]
-    else page = 0;
+    let page = document.URL.match(regex.urlToPageRegex)[0]
+    if (page === null || page === undefined) page = 0
     let userID = document.URL.match(regex.userToIDRegex)[0]
-    SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}?o=${page}, 600`).then(posts => {
+    SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}?o=${page}`, 0).then(posts => {
         posts = JSON.parse(posts)
-        tempStorage = { postDB: {}, urls: {} };
+        tempStorage = { postDB: {}, urls: {}, version: version };
         SetSessionStorage()
         for (let i = 0; i < elements.length; i++) {
             let element = elements[i];
@@ -955,10 +964,10 @@ function RestoreImagesOLD() {
                         }
 
                         if (imageLinks.length > 0) {
-                            CreateThumbnail(element, imageLinks[0], "image");
+                            CreateThumbnail(element, imageLinks[0], "img");
                             console.log(imageLinks[0])
 
-                            tempStorage.postDB[postUserID][postID] = { type: "image", content: imageLinks[0] }
+                            tempStorage.postDB[postUserID][postID] = { type: "img", content: imageLinks[0] }
                         } else {
                             CreateThumbnail(element, data[0], "text");
 
@@ -1067,7 +1076,7 @@ function SetSessionStorage() {
 function GetSessionStorage() {
     tempStorage = JSON.parse(sessionStorage.getItem("cache"));
     if (tempStorage == null) {
-        tempStorage = { postDB: {} };
+        tempStorage = { postDB: {}, urls: {}, version: version };
         SetSessionStorage()
     }
     if (!tempStorage.hasOwnProperty("postDB")) {
