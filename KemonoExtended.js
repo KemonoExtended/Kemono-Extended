@@ -333,18 +333,18 @@ function CreateSubscribeButton(parentNode) { //Adds subscription button on user 
 
                 SetDB();
                 browserStorage.set(syncStorage);
-            })
 
-            const apiURL = `https://${site}.su/api/v1/${service}/user/${userID}`;
-            SendRequest(apiURL, 300).then((dataString) => {
-                const request = JSON.parse(dataString);
-                if (request != null) {
-                    FetchDB().then(() => {
-                        syncStorage.subscribed[userID].lastPost = request[0].added;
-                        SetDB();
-                        browserStorage.set(syncStorage);
-                    })
-                }
+                const apiURL = `https://${site}.su/api/v1/${service}/user/${userID}`;
+                SendRequest(apiURL, 300).then((dataString) => {
+                    const request = JSON.parse(dataString);
+                    if (request != null) {
+                        FetchDB().then(() => {
+                            syncStorage.subscribed[userID].lastPost = request[0].added;
+                            SetDB();
+                            browserStorage.set(syncStorage);
+                        })
+                    }
+                })
             })
 
             subscribeButton.classList.add("subscribed");
@@ -955,7 +955,7 @@ function RestoreImagesOLD() {
 
         if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
             let entry = tempStorage.postDB[postUserID][postID];
-            CreateThumbnail(element, entry.content, entry.type);
+            CreateThumbnail(element, entry.content.post, entry.type);
         } else {
             restoredImages++;
             setTimeout(() => {

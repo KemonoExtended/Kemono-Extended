@@ -28,7 +28,7 @@
     "*://*.coomer.su/*",
     "webRequest",
     "webRequestBlocking",
-    "*://*/*"
+    "https://cdn.tsyndicate.com/sdk/v1/p.js" 
   ],
   "background": {
     "scripts": [
