@@ -1,6 +1,6 @@
 let downloadQueue = [];
 let downloadRunning = false;
-const maxDownloadTries = 5
+const maxDownloadTries = 5;
 const error404Regex = /.\w+$/
 const errorFileExtensions = [".html", ".htm"];
 const { storage } = browser;
@@ -8,13 +8,13 @@ const { session } = browser.storage;
 const browserStorage = browser.storage.local;
 
 let settingsDefaults = {
-    wheelTiltFF: { value: true, pc: true, mobile: false, description: "Mouse wheel navigation", explanation: 'Use tilting of the mouse wheel for navigation.' },
+    restoreThumbnailsFF: { value: true, pc: true, mobile: true, description: "Restore post thumbnails", explanation: 'Restores thumbnails of posts when no thumbnail exists. If the post contains no images, the content of the post itself is displayed instead.' },
     readPostsFF: { value: true, pc: true, mobile: true, description: "Mark visited posts", explanation: 'Add a "read" badge to visited posts.' },
     downloaderFF: { value: true, pc: true, mobile: true, description: "Image downloader", explanation: 'Add a download button to the corner of images.' },
-    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread dots in favorites", explanation: 'Highlight users with new posts in your favorites.' },
-    restoreThumbnailsFF: { value: true, pc: true, mobile: true, description: "Restore post thumbnails", explanation: 'Restores thumbnails of posts when no thumbnail exists. If the post contains no images, the content of the post itself is displayed instead.' },
-    subscriptionsFF: { value: true, pc: true, mobile: false, description: "Add Subscriptions", explanation: 'Enables the subscription system. this adds a "subscribe" button to user pages. It also allows the extension to check for new posts in the background and to notify you of them.' },
-    swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' },
+    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread markers in favorites", explanation: 'Highlight users with new posts in your favorites.' },
+    subscriptionsFF: { value: true, pc: true, mobile: false, description: "Subscriptions", explanation: 'Enables the subscription system. this adds a "subscribe" button to user pages. It also allows the extension to check for new posts in the background and to notify you of them with system notifications.' },
+    wheelTiltFF: { value: true, pc: true, mobile: false, description: "Mouse wheel navigation", explanation: 'Use tilting of the mouse wheel for navigation.' },
+    swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' }
 }
 
 let syncStorage = {};
@@ -24,6 +24,18 @@ CheckSubscribed()
 setInterval(() => {
     CheckSubscribed()
 }, 1800000) // repeat every half hour
+
+browser.webRequest.onBeforeRequest.addListener(
+    function (details) {
+        console.log("refresh")
+        if (details.tabId >= 0) {
+            browser.tabs.sendMessage(details.tabId, { type: "refresh" });
+        }
+    },
+    { urls: ["https://cdn.tsyndicate.com/sdk/v1/p.js"] }, // this is the trigger to load the content script
+    ["blocking"]
+);
+
 
 function CheckSubscribed() {
     FetchDB().then(() => {
@@ -98,7 +110,7 @@ function Download(tries = 0) {
                 downloadRunning = false
                 reject("problem with url: " + url);
             }
-            let downloadStartStatus /*promise when the download is registered*/ = browser.downloads.download({ url: url })
+            let downloadStartStatus = browser.downloads.download({ url: url })
             downloadStartStatus.then((downloadID /*ID of the created download item*/) => {
 
                 let lastPercentage = 0;
@@ -229,6 +241,31 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+function SyncObjects(oldObject, newObject) {
+    const result = structuredClone(newObject); // Clone obj2 to avoid mutating it
+
+    function mergeObjects(source, target) {
+        for (const key in source) {
+            if (typeof source[key] === "object" && !Array.isArray(source[key]) && source[key] !== null) {
+                // If the key exists in target and both are objects, merge them recursively
+                if (!target[key] || typeof target[key] !== "object" || Array.isArray(target[key])) {
+                    target[key] = {};
+                }
+                mergeObjects(source[key], target[key]);
+            } else {
+                // Otherwise, add the value from source if it's not in target
+                if (!(key in target)) {
+                    target[key] = source[key];
+                }
+            }
+        }
+    }
+
+    mergeObjects(oldObject, result);
+
+    return result;
+}
+
 function FetchDB() {
     return new Promise((resolve) => {
         browserStorage.get().then((data) => {
@@ -262,19 +299,16 @@ function FetchDB() {
     })
 }
 
-function SendRequest(url, lifetimeS = 0) {
+function SetDB() {
+    browserStorage.get().then((data) => {
+        console.log("setting DB", data, syncStorage)
+        syncStorage.lastDBUpdate = Date.now();
+        browserStorage.set(syncStorage);
+    })
+}
+
+function SendRequest(url) {
     return new Promise((resolve, reject) => {
-        GetSessionStorage()
-        if (!tempStorage.hasOwnProperty("urls")) {
-            tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
-            SetSessionStorage()
-        }
-        else if (tempStorage.urls.hasOwnProperty(url)) {
-            if (Date.now() - tempStorage.urls[url].date <= tempStorage.urls[url].lifetime * 1000) { // update every 10 minutes
-                console.log("retrieving cached data from " + url)
-                resolve(tempStorage.urls[url].data)
-            }
-        }
         console.log("Sending request to " + url);
         let before = Date.now();
         fetch(url).then(response => {
@@ -282,22 +316,6 @@ function SendRequest(url, lifetimeS = 0) {
                 throw new Error('Network response was not ok');
             }
             console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
-            if (lifetimeS > 0 && response.length > 0) {
-                tempStorage.urls[url] = {
-                    data: response,
-                    date: Date.now(),
-                    lifetime: lifetimeS
-                }
-                SetSessionStorage()
-                setTimeout(() => {
-                    GetSessionStorage()
-                    if (tempStorage.hasOwnProperty(url)) {
-                        delete tempStorage[url]
-                        SetSessionStorage()
-                    }
-                }, (lifetimeS * 1000) + 1000);
-            }
-            SetSessionStorage()
             resolve(response.text());
         })
             .catch(error => {
@@ -305,13 +323,5 @@ function SendRequest(url, lifetimeS = 0) {
                 console.error('Error fetching HTML:', error);
                 reject(null);
             });
-    })
-}
-
-function SetDB() {
-    browserStorage.get().then((data) => {
-        console.log("setting DB", data, syncStorage)
-        syncStorage.lastDBUpdate = Date.now();
-        browserStorage.set(syncStorage);
     })
 }

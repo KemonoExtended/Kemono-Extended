@@ -3,17 +3,21 @@ const { session } = browser.storage;
 const browserStorage = browser.storage.local;
 import ProgressBar from 'progressbar.js';
 
-const isMobile = window.matchMedia("(pointer: coarse)").matches;
-console.log(isMobile)
+let isMobile = /android|mobile/i.test(navigator.userAgent)
+console.log("Mobile device: " + isMobile)
+
+document.addEventListener('securitypolicyviolation', (e) => {
+    console.log('Blocked URL:', e.blockedURI);
+});
 
 let settingsDefaults = {
-    wheelTiltFF: { value: true, pc: true, mobile: false, description: "Mouse wheel navigation", explanation: 'Use tilting of the mouse wheel for navigation.' },
+    restoreThumbnailsFF: { value: true, pc: true, mobile: true, description: "Restore post thumbnails", explanation: 'Restores thumbnails of posts when no thumbnail exists. If the post contains no images, the content of the post itself is displayed instead.' },
     readPostsFF: { value: true, pc: true, mobile: true, description: "Mark visited posts", explanation: 'Add a "read" badge to visited posts.' },
     downloaderFF: { value: true, pc: true, mobile: true, description: "Image downloader", explanation: 'Add a download button to the corner of images.' },
-    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread dots in favorites", explanation: 'Highlight users with new posts in your favorites.' },
-    restoreThumbnailsFF: { value: true, pc: true, mobile: true, description: "Restore post thumbnails", explanation: 'Restores thumbnails of posts when no thumbnail exists. If the post contains no images, the content of the post itself is displayed instead.' },
-    subscriptionsFF: { value: true, pc: true, mobile: false, description: "Add Subscriptions", explanation: 'Enables the subscription system. this adds a "subscribe" button to user pages. It also allows the extension to check for new posts in the background and to notify you of them.' },
-    swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' },
+    unreadDotFF: { value: true, pc: true, mobile: true, description: "Unread markers in favorites", explanation: 'Highlight users with new posts in your favorites.' },
+    subscriptionsFF: { value: true, pc: true, mobile: false, description: "Subscriptions", explanation: 'Enables the subscription system. this adds a "subscribe" button to user pages. It also allows the extension to check for new posts in the background and to notify you of them with system notifications.' },
+    wheelTiltFF: { value: true, pc: true, mobile: false, description: "Mouse wheel navigation", explanation: 'Use tilting of the mouse wheel for navigation.' },
+    swipeNavigationFF: { value: true, pc: false, mobile: true, description: "Swipe navigation", explanation: 'Allows navigation with swipe gestures.' }
 }
 
 const regex = {
@@ -67,21 +71,72 @@ CreateNodeObserver(
     true,
 );
 
-
 let postID;
 let notificationID = 0;
+let wheelTiltListener = false;
 let lastPost = Number.MAX_SAFE_INTEGER;
 let version = "2.0"
+let currentURL = "";
 
 // local DB copies
 let syncStorage = {}; // not actually synchronous across devices, just persistent storage
 let tempStorage = {};
-//console.log(tempStorage)
+let tempStorageDB;
 
-FetchDB().then(() => { Main(); });
+
+if (isMobile) { // hides the sidebar at load
+    CreateNodeObserver((element) => element.classList.contains("global-sidebar"), (element) => {
+
+        const observer = new MutationObserver((mutationsList, observer) => {
+            for (const mutation of mutationsList) {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    const sidebar = document.getElementsByClassName("close-sidebar")[0];
+                    sidebar.click();
+                    observer.disconnect();
+                }
+            };
+        })
+
+        observer.observe(element, {
+            attributes: true,
+            attributeFilter: ['class'], // Only watch the 'class' attribute
+        });
+    }, true)
+}
+
+browser.runtime.onMessage.addListener((message) => {
+    if (message.type == "refresh" && document.URL != currentURL) {
+        currentURL = document.URL;
+        console.log("refresh");
+        FetchDB().then(() => {
+            SetupIndexedDB("Storage", "SessionStorage").then((db) => {
+                tempStorageDB = db
+                GetSessionStorage().then(() => {
+                    Main();
+                });
+            });
+        });
+    }
+})
+
+document.addEventListener('securitypolicyviolation', (e) => {
+    if (e.blockedURI == "https://cdn.tsyndicate.com/sdk/v1/p.js" && document.URL != currentURL) {
+        currentURL = document.URL;
+        console.log("refresh");
+        FetchDB().then(() => {
+            SetupIndexedDB("Storage", "SessionStorage").then((db) => {
+                tempStorageDB = db
+                GetSessionStorage().then(() => {
+                    Main();
+                });
+            });
+        });
+    }
+});
+
+
 
 function Main() {
-    GetSessionStorage()
     if (!tempStorage.hasOwnProperty("version") || tempStorage.version != version) {
         tempStorage = { postDB: {}, urls: {}, version: version };
         SetSessionStorage()
@@ -97,7 +152,7 @@ function Main() {
         SeePostFromPost();
 
         postID = document.URL.match(regex.postToIDRegex)[0];
-        if (document.readyState === true) {
+        if (document.readyState == "complete") {
             let textDivs = document.getElementsByClassName("fileThumb")
             for (let i = 0; i < textDivs.length; i++) {
                 if (!textDivs[i].firstElementChild.complete) {
@@ -140,19 +195,17 @@ function Main() {
         if (syncStorage.postDB[userID].data.lastPostDate !== undefined) {
             lastPost = syncStorage.postDB[userID].data.lastPostDate
         }
-        CreateNodeObserver(
-            (element) => { return element.classList.contains("user-header__actions"); },
-            (element) => {
-                element.classList.add("read-all-div");
-                if (!isMobile) {
-                    CreateSubscribeButton(element);
-                    element.parentElement.parentElement.style.maxWidth = "800px";
-                }
-                let elements = element.children;
-                for (let i = 0; i < elements.length; i++) {
-                    elements[i].style = "margin-right: 0px;";
-                }
-            }, true);
+        let userHeader = document.getElementsByClassName("user-header__actions")
+        let element = userHeader[0]
+        element.classList.add("read-all-div");
+        if (!isMobile) {
+            CreateSubscribeButton(element);
+            element.parentElement.parentElement.style.maxWidth = "800px";
+        }
+        let elements = element.children;
+        for (let i = 0; i < elements.length; i++) {
+            elements[i].style = "margin-right: 0px;";
+        }
 
 
         GetLastPostDate(document.URL.match(regex.siteRegex)[0], document.URL.match(regex.serviceRegex)[0], document.URL.match(regex.userToIDRegex)[0]).then(lastPostDate => {
@@ -162,14 +215,8 @@ function Main() {
             SetDB()
         })
 
-
-        CreateNodeObserver(
-            (element) => { return element.classList.contains("post-card__header"); },
-            (element) => { CreateSeenBadge(element, lastPost); }
-        );
-
         let postElements = document.getElementsByClassName("post-card__header")
-        for (let i = 0; i < postElements; i++) CreateSeenBadge(postElements[i], lastPost)
+        for (let i = 0; i < postElements.length; i++) CreateSeenBadge(postElements[i], lastPost)
 
 
         if (!syncStorage.postDB.hasOwnProperty(userID)) {
@@ -180,15 +227,11 @@ function Main() {
         }
 
 
-        console.log(document.URL)
         const service = document.URL.match(regex.siteRegex)[0];
-        const requestURL = `https://${service}.su/api/v1/creators.txt`
-        console.log(requestURL)
-        SendRequest(requestURL, 300).then((dataString) => {
+        SendRequest(`https://${service}.su/api/v1/creators.txt`, 600).then((dataString) => {
             let data = JSON.parse(dataString);
-            console.log(data, dataString)
             let entry = data.find((element) => {
-                return element.id == parseInt(userID)
+                return String(element.id) == userID
             })
             FetchDB().then(() => {
                 if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
@@ -217,7 +260,6 @@ function Main() {
 
     // If URL is a user browser
     else if (regex.userBrowserRegex.test(document.URL)) {
-        console.log("user browser");
         AddUnreadBadges();
         RegularUpdateUnreadBadges();
     }
@@ -236,7 +278,8 @@ function Main() {
 }
 
 function CreateSubscribeButton(parentNode) { //Adds subscription button on user pages
-    if (!syncStorage.settings.subscriptionsFF.value) {
+    if (!syncStorage.settings.subscriptionsFF.value ||
+        document.getElementById("subscribe") != null) {
         return;
     }
     parentNode.style.display = "flex"
@@ -282,7 +325,6 @@ function CreateSubscribeButton(parentNode) { //Adds subscription button on user 
             SendNotification("Subscribed to " + name, profilePictureURL)
             let site = document.URL.match(regex.siteRegex)[0];
             let service = document.URL.match(regex.serviceRegex)[0];
-            console.log(name)
             FetchDB().then(() => {
                 syncStorage.subscribed[userID] = {}
                 syncStorage.subscribed[userID].site = document.URL.match(regex.siteRegex)[0];
@@ -325,7 +367,6 @@ function GetLastPostDate(site, service, userID) { // returns the last post date 
 }
 
 function CreateSeenBadge(postElement, lastPostDate) { //Creates a badge and style for posts that have been seen or read previously
-    // console.log(postElement)
     if (!syncStorage.settings.readPostsFF.value) {
         return;
     }
@@ -336,12 +377,12 @@ function CreateSeenBadge(postElement, lastPostDate) { //Creates a badge and styl
     if (!syncStorage.postDB[userID].hasOwnProperty("data")) {
         syncStorage.postDB[userID].data = {};
     }
+
     const postID = postElement.parentElement.href.match(regex.postToIDRegex)[0];
     let postDate = postElement.parentElement.getElementsByClassName("timestamp")[0].dateTime;
     let postUnix = DateToUnix(postDate);
     let newPost = lastPostDate < postUnix
     if (syncStorage.postDB[userID].hasOwnProperty(postID) || newPost) {
-        console.log(postElement.parentElement.getElementsByClassName("post-card__image-container"));
         if (postElement.parentElement.getElementsByClassName("post-card__image-container").length == 0) {
             let textDiv = document.createElement("div");
             textDiv.classList.add("post-card__image-container");
@@ -377,70 +418,61 @@ function CreateSeenBadge(postElement, lastPostDate) { //Creates a badge and styl
     }
 }
 
-function AddUnreadBadges() { // adds a badge to user browsers which indicates which of the users, has posts that are new
+async function AddUnreadBadges() { // adds a badge to user browsers which indicates which of the users, has posts that are new
     if (!syncStorage.settings.unreadDotFF.value) {
         return;
     }
-    GetSessionStorage()
-    console.log("tempStorage: " + tempStorage)
+    await GetSessionStorage()
 
     let service = document.location.href.match(regex.siteRegex)[0];
-    console.log(service)
-    SendRequest(`https://${service}.su/api/v1/creators.txt, 300`).then((dataString) => {
-        let data = JSON.parse(dataString);
-        console.log(data)
-        let profiles = document.getElementsByClassName("user-card")
-        for (let i = 0; i < profiles.length; i++) {
-            let entry = data.find((element) => {
-                return element.id == profiles[i].href.match(regex.userToIDRegex)[0];
-            })
-            if (syncStorage.postDB.hasOwnProperty(entry.id)) {
-                if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate") || syncStorage.postDB[entry.id].data.lastImportDate == NaN) {
-                    syncStorage.postDB[entry.id].data.lastImportDate = -1;
-                } else {
-                    console.log(syncStorage.postDB[entry.id].data.lastImportDate, DateToUnix(entry.last_imported))
-                    let lastImportDate = syncStorage.postDB[entry.id].data.lastImportDate;
-                    let hasUnreadPosts = DateToUnix(entry.updated) > lastImportDate;
+    let data;
+    await SendRequest(`https://${service}.su/api/v1/creators.txt`, 600).then((dataString) => {
+        data = JSON.parse(dataString);
+    })
+    let profiles = document.getElementsByClassName("user-card")
 
-                    console.log("has new posts: " + hasUnreadPosts);
-                    if (hasUnreadPosts && !profiles[i].classList.contains("new-posts-user")) {
-                        console.warn(DateToUnix(entry.last_imported), lastImportDate)
-                        console.log(profiles[i])
-                        let unreadDot = document.createElement("div");
-                        unreadDot.classList.add("new-posts")
-                        profiles[i].appendChild(unreadDot);
-                        profiles[i].classList.add("new-posts-user")
-                    } else if (!hasUnreadPosts && profiles[i].classList.contains("new-posts-user")) {
-                        profiles[i].classList.remove("new-posts-user")
-                        profiles[i].removeChild(profiles[i].getElementsByClassName("new-posts")[0])
-                    }
-                }
+    if (profiles.length > 0) {
+        let profileData = {};
+        for (let i = 0; i < profiles.length; i++) {
+            let postUserID = profiles[i].href.match(regex.userToIDRegex)[0];
+            profileData[postUserID] = null;
+        }
+        data.map((element) => {
+            if (profileData.hasOwnProperty(element.id)) {
+                profileData[element.id] = element;
+            }
+        })
+        for (let i = 0; i < profiles.length; i++) {
+            CreateUnreadBadge(profiles[i], profileData[profiles[i].href.match(regex.userToIDRegex)[0]]);
+        }
+    }
+}
+
+function CreateUnreadBadge(element, entry) {
+    /*
+    let entry = data.find((dataElement) => {
+        return dataElement.id == element.href.match(regex.userToIDRegex)[0];        // This has to be the worst code I have ever written
+    })
+    */
+    if (syncStorage.postDB.hasOwnProperty(entry.id)) {
+        if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate") || syncStorage.postDB[entry.id].data.lastImportDate == NaN || syncStorage.postDB[entry.id].data.lastImportDate == -1) {
+            syncStorage.postDB[entry.id].data.lastImportDate = -1;
+        } else {
+            let lastImportDate = syncStorage.postDB[entry.id].data.lastImportDate;
+            let hasUnreadPosts = entry.updated * 1000 > lastImportDate;
+
+            console.log("has new posts: " + hasUnreadPosts);
+            if (hasUnreadPosts && !element.classList.contains("new-posts-user")) {
+                let unreadDot = document.createElement("div");
+                unreadDot.classList.add("new-posts")
+                element.appendChild(unreadDot);
+                element.classList.add("new-posts-user")
+            } else if (!hasUnreadPosts && element.classList.contains("new-posts-user")) {
+                element.classList.remove("new-posts-user")
+                element.removeChild(element.getElementsByClassName("new-posts")[0])
             }
         }
-        CreateNodeObserver(
-            (element) => {
-                return element.class == "user-card"
-            },
-            (element) => {
-                let entry = data.find((element1) => {
-                    return element1.id == element.dataset.id
-                })
-                if (syncStorage.postDB.hasOwnProperty(entry.id)) {
-                    if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate")) {
-                        syncStorage.postDB[entry.id].data.lastImportDate = -1;
-                    }
-                    let lastImportDate = syncStorage.postDB[entry.id].data.lastImportDate;
-                    if (DateToUnix(entry.last_imported) != lastImportDate) {
-                        console.warn(DateToUnix(entry.last_imported), lastImportDate)
-                        console.log(element)
-                        let unreadDot = document.createElement("div");
-                        unreadDot.classList.add("new-posts")
-                        element.appendChild(unreadDot);
-                        element.classList.add("new-posts-user")
-                    }
-                }
-            })
-    })
+    }
 }
 
 function SeePostFromPost() {
@@ -489,8 +521,13 @@ function CreateDownloadButton(element, attribute, attributeRegex) {
     let pBContainer = document.createElement("div");
     pBContainer.id = "progress-container";
     downloadDiv.appendChild(pBContainer);
-    downloadDiv.addEventListener("click", () => {
-        console.log(downloadDiv)
+    downloadDiv.addEventListener("mouseenter", () => {
+        downloadDiv.parentElement.style.pointerEvents = "none"
+    })
+    downloadDiv.addEventListener("mouseleave", () => {
+        downloadDiv.parentElement.style.pointerEvents = "all"
+    })
+    downloadDiv.addEventListener("click", (e) => {
         QueDownload(imageURL, downloadDiv, thumbnailURL);
     });
 }
@@ -499,7 +536,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
     const downloadIcon = downloadDiv.children[0];
 
     if (downloadIcon.nextElementSibling == null || downloadIcon.nextElementSibling.children.length == 0) { //download is not running
-        console.log("download not running")
         downloadIcon.style.opacity = 0;
         let circle = new ProgressBar.Circle(downloadIcon.nextElementSibling, {
             color: "white",
@@ -513,7 +549,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
         downloadIcon.nextElementSibling.style.opacity = 1;
         const imageID = url.match(regex.imageToIDRegex)[0];
         const userID = document.URL.match(regex.userToIDRegex)[0];
-        console.log(isMobile);
         let cancelButton = document.createElement("div");
         cancelButton.classList.add("download-cancel");
         downloadIcon.parentElement.appendChild(cancelButton);
@@ -522,7 +557,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
             cancelButton.style.opacity = 1;
             MobileDownload(url, (progress) => {
                 statusCircle.animate(Math.max(progress / 100, 0.01));
-                console.log(progress)
             }, () => {
                 let fetchIndex = activeMobileDownloads.findIndex(download => download.url === url);
                 if (fetchIndex !== -1) {
@@ -543,7 +577,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
                     cancelButton.style.opacity = 0;
                     setTimeout(() => { cancelButton.remove(); }, 200);
                     setTimeout(() => {
-                        console.log("test");
                         downloadIcon.classList = ["download-finished"];
                         downloadIcon.style.opacity = 1
                         downloadIcon.nextElementSibling.style.opacity = 0;
@@ -558,14 +591,12 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
             browser.runtime.onMessage.addListener((request) => {
                 if (request.type == "DownloadProgress" && request.url == url) {
                     if (request.status == "downloading") {
-                        console.log(request.progress);
                         statusCircle.animate(Math.max(request.progress / 100, 0.01))
                     } else if (request.status == "download-complete") {
                         statusCircle.animate(1);
                         cancelButton.style.opacity = 0;
                         setTimeout(() => { cancelButton.remove(); }, 200);
                         setTimeout(() => {
-                            console.log("test");
                             downloadIcon.classList = ["download-finished"];
                             downloadIcon.style.opacity = 1
                             downloadIcon.nextElementSibling.style.opacity = 0;
@@ -579,7 +610,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
                         cancelButton.style.opacity = 0;
                         setTimeout(() => { cancelButton.remove(); }, 200);
                         setTimeout(() => {
-                            console.log("test");
                             downloadIcon.classList = ["download"];
                             downloadIcon.style.opacity = 1
                             downloadIcon.nextElementSibling.style.opacity = 0;
@@ -589,8 +619,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
                             }, 200);
                         }, 500)
                     }
-                } else {
-                    console.log(request);
                 }
             })
             SendNotification("Downloading", thumbnailURL);
@@ -604,7 +632,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
         cancelButton.style.opacity = 0;
         setTimeout(() => { cancelButton.remove(); }, 200);
         setTimeout(() => {
-            console.log("test");
             downloadIcon.classList = ["download"];
             downloadIcon.style.opacity = 1
             downloadIcon.nextElementSibling.style.opacity = 0;
@@ -619,7 +646,6 @@ function QueDownload(url, downloadDiv, thumbnailURL) {
             console.log(activeMobileDownloads);
             let fetchEntry = activeMobileDownloads.find((element) => (element.url == url));
             if (fetchEntry != undefined) {
-                console.log(fetchEntry.controller);
                 fetchEntry.controller.abort();
             }
             else {
@@ -700,25 +726,28 @@ function HandleWheelTilt(event) {
         if (deltaX > 0) {
             let linkRight = document.getElementsByClassName("next");
             if (linkRight.length > 0) {
-                location.href = linkRight[0].href;
+                linkRight[0].click()
             }
         } else {
             let linkLeft = document.getElementsByClassName("prev");
             if (linkLeft.length > 0) {
-                location.href = linkLeft[0].href;
+                linkLeft[0].click()
             }
         }
     }
 }
 
 function AddMouseTiltListener() {
-    // Add wheel event listener
-    if ("onwheel" in document) {
-        // Modern browsers support the 'wheel' event
-        document.addEventListener("wheel", HandleWheelTilt);
-    } else {
-        // Legacy browsers support the 'mousewheel' event
-        document.addEventListener("mousewheel", HandleWheelTilt);
+    if (!wheelTiltListener) {
+        wheelTiltListener = true;
+        // Add wheel event listener
+        if ("onwheel" in document) {
+            // Modern browsers support the 'wheel' event
+            document.addEventListener("wheel", HandleWheelTilt);
+        } else {
+            // Legacy browsers support the 'mousewheel' event
+            document.addEventListener("mousewheel", HandleWheelTilt);
+        }
     }
 }
 
@@ -726,122 +755,125 @@ function RestoreImages() {
     if (!syncStorage.settings.restoreThumbnailsFF.value) {
         return
     }
-    GetSessionStorage();
-    if (window.readyState === true) {
-        let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
-        if (elements.length > 0) RestoreThumbnails(elements)
-    }
-    else {
-        window.onload = () => {
-            let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card--preview > a)');
+    GetSessionStorage().then(() => {
+        if (document.readyState == "complete") {
+            let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card > a)');
             if (elements.length > 0) RestoreThumbnails(elements)
         }
-    }
+        else {
+            window.onload = () => {
+                let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card > a)');
+                if (elements.length > 0) RestoreThumbnails(elements)
+            }
+        }
+    })
 }
 
 function RestoreThumbnails(elements) {
-    console.log(elements)
     let site = document.URL.match(regex.siteRegex)[0];
     let service = document.URL.match(regex.serviceRegex)[0];
-    let page = document.URL.match(regex.urlToPageRegex)[0]
-    if (page === null || page === undefined) page = 0
+    let page = undefined
+    try { page = document.URL.match(regex.urlToPageRegex)[0] }
+    catch { page = 0 }
     let userID = document.URL.match(regex.userToIDRegex)[0]
     SendRequest(`https://${site}.su/api/v1/${service}/user/${userID}?o=${page}`, 0).then(posts => {
         posts = JSON.parse(posts)
-        tempStorage = { postDB: {}, urls: {}, version: version };
-        SetSessionStorage()
-        for (let i = 0; i < elements.length; i++) {
-            let element = elements[i];
-            let postID = element.href.match(regex.postToIDRegex)[0];
+        GetSessionStorage().then(() => {
+            for (let i = 0; i < elements.length; i++) {
+                let element = elements[i];
+                let postID = element.href.match(regex.postToIDRegex)[0];
 
-            if (tempStorage.postDB.hasOwnProperty(userID) && tempStorage.postDB[userID].hasOwnProperty(postID)) {
-                let entry = tempStorage.postDB[userID][postID];
-                CreateThumbnail(element, entry.content, entry.type);
-            } else {
-                let data = posts.find((element) => element.id == postID)
-                if (data.length < 1) {
-                    console.error("post not found. response: " + response)
-                }
-                else {
-                    let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
-                    let videoFormats = ["mp4", "webm", "mkv", "avi", "m4v"]
-                    let thumbnail = { image: undefined, video: undefined };
-
-
-                    try {
-                        console.log(element, data.content)
-                        const parser = new DOMParser();
-                        let contentDOM = parser.parseFromString(data.content, 'text/html')
-                        let imageElements = Array.from(contentDOM.all).filter(element3 => element3.tagName == "IMG" || element3.tagName == "VIDEO")
-
-                        if (imageElements.length > 0) {
-                            thumbnail.image = imageElements.find((element) => imageFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
-
-                            if (thumbnail.image == undefined) {
-                                thumbnail.video = imageElements.find((element) => videoFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
-                            }
-                        }
-                    } catch { }
-
-
-                    if (thumbnail.image == undefined) {
-                        try {
-                            let fileExtension = data.file.path.match(regex.fileExtensionRegex)[0]
-                            if (imageFormats.includes(fileExtension)) {
-                                thumbnail.image = [data.file.path]
-
-                            }
-                            if (thumbnail.image == undefined && thumbnail.video == undefined) {
-                                if (videoFormats.includes(fileExtension)) {
-                                    thumbnail.video = [data.file.path]
-                                }
-                            }
-                        } catch { };
+                if (tempStorage.postDB.hasOwnProperty(userID) &&
+                    tempStorage.postDB[userID].hasOwnProperty(postID) &&
+                    tempStorage.postDB[userID][postID].hasOwnProperty("type")) {
+                    console.log("post cached")
+                    let entry = tempStorage.postDB[userID][postID];
+                    CreateThumbnail(element, entry.content, entry.type);
+                } else {
+                    console.log("not cached")
+                    let data = posts.find((element) => element.id == postID)
+                    if (data.length < 1) {
+                        console.error("post not found. response: " + response)
                     }
+                    else {
+                        let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
+                        let videoFormats = ["mp4", "webm", "mkv", "avi", "m4v"]
+                        let thumbnail = { image: undefined, video: undefined };
 
 
-                    if (thumbnail.image == undefined)
                         try {
-                            thumbnail.image = data.attachments.find((element) =>
-                                imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                                .map(element => element.path)
+                            const parser = new DOMParser();
+                            let contentDOM = parser.parseFromString(data.content, 'text/html')
+                            let imageElements = Array.from(contentDOM.all).filter(element3 => element3.tagName == "IMG" || element3.tagName == "VIDEO")
 
-                            if (thumbnail.image == undefined && thumbnail.video == undefined) {
-                                thumbnail.video = data.attachments.find((element) =>
-                                    videoFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                                    .map(element => element.path)
+                            if (imageElements.length > 0) {
+                                thumbnail.image = imageElements.find((element) => imageFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
+
+                                if (thumbnail.image == undefined) {
+                                    thumbnail.video = imageElements.find((element) => videoFormats.includes(element.src.match(regex.fileExtensionRegex)[0])).src
+                                }
                             }
                         } catch { }
 
-                    console.log(thumbnail)
 
-                    GetSessionStorage();
-                    if (!tempStorage.postDB.hasOwnProperty(userID)) tempStorage.postDB[userID] = {};
-                    if (!tempStorage.postDB[userID].hasOwnProperty(postID)) tempStorage.postDB[userID][postID] = {};
+                        if (thumbnail.image == undefined) {
+                            try {
+                                let fileExtension = data.file.path.match(regex.fileExtensionRegex)[0]
+                                if (imageFormats.includes(fileExtension)) {
+                                    thumbnail.image = [data.file.path]
 
-                    if (thumbnail.image != undefined) {
-                        tempStorage.postDB[userID][postID] = { type: "img", content: thumbnail.image }
-                        SetSessionStorage();
+                                }
+                                if (thumbnail.image == undefined && thumbnail.video == undefined) {
+                                    if (videoFormats.includes(fileExtension)) {
+                                        thumbnail.video = [data.file.path]
+                                    }
+                                }
+                            } catch { };
+                        }
 
-                        CreateThumbnail(element, thumbnail.image, "img");
-                    }
 
-                    else if (thumbnail.video != undefined) {
-                        tempStorage.postDB[userID][postID] = { type: "video", content: thumbnail.video }
-                        SetSessionStorage();
+                        if (thumbnail.image == undefined)
+                            try {
+                                thumbnail.image = data.attachments.find((element) =>
+                                    imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                                    .map(element => element.path)
 
-                        CreateThumbnail(element, thumbnail.video, "video");
-                    }
+                                if (thumbnail.image == undefined && thumbnail.video == undefined) {
+                                    thumbnail.video = data.attachments.find((element) =>
+                                        videoFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                                        .map(element => element.path)
+                                }
+                            } catch { }
+                        if (!tempStorage.postDB.hasOwnProperty(userID)) {
+                            tempStorage.postDB[userID] = {};
+                            SetSessionStorage()
+                        }
+                        if (!tempStorage.postDB[userID].hasOwnProperty(postID)) {
+                            tempStorage.postDB[userID][postID] = {};
+                            SetSessionStorage()
+                        }
+                        if (thumbnail.image != undefined) {
+                            tempStorage.postDB[userID][postID] = { type: "img", content: thumbnail.image }
 
-                    else {
-                        tempStorage.postDB[userID][postID] = { type: "text", content: data }
-                        SetSessionStorage();
+                            CreateThumbnail(element, thumbnail.image, "img");
+                        }
 
-                        CreateThumbnail(element, data, "text");
+                        else if (thumbnail.video != undefined) {
+                            tempStorage.postDB[userID][postID] = { type: "video", content: thumbnail.video }
+
+                            CreateThumbnail(element, thumbnail.video, "video");
+                        }
+
+                        else {
+                            tempStorage.postDB[userID][postID] = { type: "text", content: data }
+
+                            CreateThumbnail(element, data, "text");
+                        }
                     }
                 }
             }
-        }
+            SetSessionStorage()
+        })
     })
 }
 
@@ -862,7 +894,6 @@ function RequestRestoreImage(element) {
 
 function CreateThumbnail(element, content, type) {
     if (type == "img" || type == "video") {
-        //console.log(content)
         if (element.getElementsByClassName("post-card__image-container").length == 0) {
             const textDiv = document.createElement("div");
             textDiv.classList.add("post-card__image-container");
@@ -916,70 +947,60 @@ function RestoreImagesOLD() {
         return
     }
     let restoredImages = 0;
+    let elements = document.querySelectorAll('a[href]:not(:has(.post-card__image)):is(.post-card > a)');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        let postUserID = element.href.match(regex.postToIDRegex)[0];
+        let postID = element.href.match(regex.postToIDRegex)[0];
 
-    CreateNodeObserver(
-        (element) => {
-            return element.tagName == "A" &&
-                element.hasAttribute("href") &&
-                element.parentElement.classList.contains("post-card--preview") &&
-                element.getElementsByClassName("post-card__image").length == 0
-        },
-        (element) => {
-            let postUserID = element.href.match(regex.postToIDRegex)[0];
-            let postID = element.href.match(regex.postToIDRegex)[0];
+        if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
+            let entry = tempStorage.postDB[postUserID][postID];
+            CreateThumbnail(element, entry.content, entry.type);
+        } else {
+            restoredImages++;
+            setTimeout(() => {
+                RequestRestoreImage(element).then((data) => {
 
-            if (tempStorage.postDB.hasOwnProperty(postUserID) && tempStorage.postDB[postUserID].hasOwnProperty(postID)) {
-                let entry = tempStorage.postDB[postUserID][postID];
-                CreateThumbnail(element, entry.content, entry.type);
-            } else {
-                restoredImages++;
-                setTimeout(() => {
-                    RequestRestoreImage(element).then((data) => {
+                    let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
+                    let contentLinks;
+                    try {
+                        contentLinks = data[0].post.content.match(regex.postContentToImageLinkRegex)
+                            .filter((element) => { console.log(element, element.match(regex.fileExtensionRegex)[0]); return imageFormats.includes(element.match(regex.fileExtensionRegex)[0]) })
+                    } catch { }
 
-                        let imageFormats = ["png", "jpg", "jpeg", "webp", "gif"]
-                        let contentLinks;
-                        try {
-                            console.log(element, data[0].content)
-                            contentLinks = data[0].content.match(regex.postContentToImageLinkRegex)
-                                .filter((element) => { console.log(element, element.match(regex.fileExtensionRegex)[0]); return imageFormats.includes(element.match(regex.fileExtensionRegex)[0]) })
-                        } catch { }
+                    let attachmentLinks;
+                    try {
+                        attachmentLinks = data[0].post.attachments.filter((element) =>
+                            imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
+                            .map(element => element.path)
+                    } catch { }
 
-                        let attachmentLinks;
-                        try {
-                            attachmentLinks = data[0].attachments.filter((element) =>
-                                imageFormats.includes(element.path.match(regex.fileExtensionRegex)[0]))
-                                .map(element => element.path)
-                        } catch { }
-                        console.log(attachmentLinks, contentLinks)
+                    let imageLinks = [];
+                    if (attachmentLinks != undefined && attachmentLinks.length > 0) {
+                        imageLinks = attachmentLinks
+                    } else if (contentLinks != undefined && contentLinks.length > 0) {
+                        imageLinks = contentLinks
+                    }
 
-                        let imageLinks = [];
-                        if (attachmentLinks != undefined && attachmentLinks.length > 0) {
-                            imageLinks = attachmentLinks
-                        } else if (contentLinks != undefined && contentLinks.length > 0) {
-                            imageLinks = contentLinks
-                        }
+                    if (!tempStorage.postDB.hasOwnProperty(postUserID)) {
+                        tempStorage.postDB[postUserID] = {}
+                        SetSessionStorage()
+                    }
 
-                        if (!tempStorage.postDB.hasOwnProperty(postUserID)) {
-                            tempStorage.postDB[postUserID] = {}
-                        }
+                    if (imageLinks.length > 0) {
+                        CreateThumbnail(element, imageLinks[0], "img");
+                        tempStorage.postDB[postUserID][postID] = { type: "img", content: imageLinks[0] }
+                        SetSessionStorage()
+                    } else {
+                        CreateThumbnail(element, data[0].post, "text");
 
-                        if (imageLinks.length > 0) {
-                            CreateThumbnail(element, imageLinks[0], "img");
-                            console.log(imageLinks[0])
-
-                            tempStorage.postDB[postUserID][postID] = { type: "img", content: imageLinks[0] }
-                        } else {
-                            CreateThumbnail(element, data[0], "text");
-
-                            tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
-                        }
-                        sessionStorage.setItem("cache", tempStorage)
-                        SetSessionStorage();
-                    })
-                }, restoredImages * 800)
-            }
+                        tempStorage.postDB[postUserID][postID] = { type: "text", content: data[0] }
+                        SetSessionStorage()
+                    }
+                })
+            }, restoredImages * 800)
         }
-    )
+    }
     GetSessionStorage();
 }
 
@@ -987,7 +1008,6 @@ function RegularUpdatePosts() {
     browser.runtime.onMessage.addListener((request) => {
         if (request.type == "DBUpdate") {
             FetchDB().then(() => {
-                console.log(syncStorage)
                 const postElements = document.getElementsByClassName("post-card__header");
                 for (let i = 0; i < postElements.length; i++) {
                     CreateSeenBadge(postElements[i], lastPost);
@@ -1070,19 +1090,33 @@ function SetDB() {
 }
 
 function SetSessionStorage() {
-    sessionStorage.setItem("cache", JSON.stringify(tempStorage))
+    SetItemInDB(tempStorageDB, "SessionStorage", tempStorage);
 }
 
 function GetSessionStorage() {
-    tempStorage = JSON.parse(sessionStorage.getItem("cache"));
-    if (tempStorage == null) {
-        tempStorage = { postDB: {}, urls: {}, version: version };
-        SetSessionStorage()
-    }
-    if (!tempStorage.hasOwnProperty("postDB")) {
-        tempStorage.postDB = {}
-        SetSessionStorage()
-    }
+    return new Promise((resolve) => {
+        GetItemFromDB(tempStorageDB, "SessionStorage").then((data) => {
+            let tempStorageTemp = structuredClone(data[0])
+            tempStorage = SyncObjects(tempStorage, tempStorageTemp)
+            if (tempStorage == null || tempStorage == undefined || tempStorage.length == 0) {
+                tempStorage = { postDB: {}, urls: {}, version: version };
+            }
+            else {
+                if (!tempStorage.hasOwnProperty("postDB")) {
+                    tempStorage.postDB = {}
+                }
+                if (!tempStorage.hasOwnProperty("urls")) {
+                    tempStorage.urls = {}
+                }
+                if (!tempStorage.hasOwnProperty("version")) {
+                    tempStorage.version = version
+                }
+            }
+            SetSessionStorage()
+            console.log("complete", tempStorage)
+            resolve()
+        });
+    })
 }
 
 function ReceiveSettingsUpdates() {
@@ -1097,9 +1131,7 @@ function ReceiveSettingsUpdates() {
                         let seenBadgesLength = seenBadges.length
                         let seenPosts = document.getElementsByClassName("seen-post");
                         let seenPostsLength = seenPosts.length
-                        console.log(seenBadges, seenPosts)
                         for (let i = 0; i < seenBadgesLength; i++) {
-                            console.log(i)
                             seenBadges[0].remove();
                         }
                         for (let i = 0; i < seenPostsLength; i++) {
@@ -1136,7 +1168,6 @@ function ReceiveSettingsUpdates() {
                         while (dots.length != 0) {
                             dots[0].remove();
                         }
-                        console.log(profiles)
                         while (profiles.length != 0) {
                             profiles[0].classList.remove("new-posts-user");
                         }
@@ -1185,55 +1216,44 @@ function CreateNodeObserver(
 
 function SendRequest(url, lifetimeS = 0) {
     return new Promise((resolve, reject) => {
-        GetSessionStorage()
-        if (!tempStorage.hasOwnProperty("urls")) {
-            tempStorage.urls = { artists: { kemono: { data: null, date: 0 }, coomer: { data: null, date: 0 } } }
-            SetSessionStorage()
-        }
-        else if (tempStorage.urls.hasOwnProperty(url)) {
-            if (Date.now() - tempStorage.urls[url].date <= tempStorage.urls[url].lifetime * 1000) { // update every 10 minutes
+        if (Object.hasOwn(tempStorage.urls, url)) {
+            if (Date.now() - tempStorage.urls[url].date <= tempStorage.urls[url].lifetime * 1000) {
                 console.log("retrieving cached data from " + url)
                 resolve(tempStorage.urls[url].data)
+                return
             }
         }
         console.log("Sending request to " + url);
         let before = Date.now();
         fetch(url).then(response => {
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                reject('Network response was not ok');
+                return
             }
             console.log("request to " + url + " took " + (Date.now() - before) / 1000 + " seconds")
-            if (lifetimeS > 0 && response.length > 0) {
-                tempStorage.urls[url] = {
-                    data: response,
-                    date: Date.now(),
-                    lifetime: lifetimeS
-                }
-                SetSessionStorage()
-                setTimeout(() => {
-                    GetSessionStorage()
-                    if (tempStorage.hasOwnProperty(url)) {
-                        delete tempStorage[url]
-                        SetSessionStorage()
+            response.text().then(responseText => {
+                if (lifetimeS > 0) {
+                    tempStorage.urls[url] = {
+                        data: responseText,
+                        date: Date.now(),
+                        lifetime: lifetimeS
                     }
-                }, (lifetimeS * 1000) + 1000);
-            }
-            SetSessionStorage()
-            resolve(response.text());
+                    SetSessionStorage()
+                }
+                resolve(responseText);
+                return
+            })
         })
             .catch(error => {
                 // Handle errors
-                console.error('Error fetching HTML:', error);
-                reject(null);
+                reject('Error fetching HTML:' + error);
+                return
             });
     })
 }
 
 function SwipeNavigation() {
     if (!isMobile || !syncStorage.settings.swipeNavigationFF.value) return;
-    CreateNodeObserver((element) => { return element == document.body }, () => {
-        CreateSwipeDetector();
-    });
     if (document.getElementsByTagName("body").length != 0) {
         CreateSwipeDetector();
     }
@@ -1244,7 +1264,6 @@ function SwipeNavigation() {
             maxVerticalDistance: 300,  // maximum allowed vertical movement (in pixels)
             maxSwipeTime: 600,  // maximum time for a swipe (in milliseconds)
             onSwipe: (direction) => {
-                console.log("swiped: " + direction)
                 let link = [];
                 if (direction == 'left') {
                     link = document.getElementsByClassName("next");
@@ -1252,18 +1271,18 @@ function SwipeNavigation() {
                     link = document.getElementsByClassName("prev");
                 }
                 if (link.length != 0) {
-                    document.addEventListener('visibilitychange', () => {
+                    /*document.addEventListener('visibilitychange', () => {
                         if (!document.hidden) {
                             document.body.style.transform = "translate(0vw)";
                         }
-                    });
+                    });*/
                     //document.body.style.overflow = "hidden"  // intended to hide the side bar. will reset scroll position to top.
-                    if (direction == "left") {
+                    /*if (direction == "left") {
                         document.body.style.transform = "translate(-160vw)";
                     } else {
                         document.body.style.transform = "translate(160vw)";
-                    }
-                    window.location.href = link[0].href
+                    }*/
+                    link[0].click()
                 }
             }
         });
@@ -1381,4 +1400,94 @@ function SendNotification(text, thumbnailURL = null) {
             }, 300);
         }, 3000);
     }, 50);
+}
+
+function SetupIndexedDB(dbName, storeName) {
+    return new Promise((resolve, reject) => {
+        if (tempStorageDB != undefined) {
+            resolve(tempStorageDB)
+        }
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName, { keyPath: "id", autoIncrement: true });
+            }
+        };
+
+        request.onsuccess = (event) => {
+            console.log("Successfully opened IndexedDB")
+            resolve(event.target.result);
+        };
+
+        request.onerror = (event) => {
+            reject(`Error opening database: ${event.target.error}`);
+        };
+    });
+}
+
+async function SetItemInDB(db, storeName, data) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, "readwrite");
+        const store = transaction.objectStore(storeName);
+
+        const request = store.put(data); // Use `.put(data)` to overwrite data with the same key
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (event) => reject(`Error saving data: ${event.target.error}`);
+    });
+}
+
+async function GetItemFromDB(db, storeName, id = null) {
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, "readonly");
+        const store = transaction.objectStore(storeName);
+
+        const request = id ? store.get(id) : store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (event) => reject(`Error retrieving data: ${event.target.error}`);
+    });
+}
+
+async function resetIndexedDB(dbName) {
+    return new Promise((resolve, reject) => {
+        const deleteRequest = indexedDB.deleteDatabase(dbName);
+
+        deleteRequest.onsuccess = () => {
+            console.log(`Database '${dbName}' deleted successfully.`);
+            resolve();
+        };
+
+        deleteRequest.onerror = (event) => {
+            reject(`Error deleting database: ${event.target.error}`);
+        };
+
+        deleteRequest.onblocked = () => {
+            console.warn(`Database '${dbName}' deletion is blocked. Close all tabs using it.`);
+        };
+    });
+}
+
+function SyncObjects(oldObject, newObject) {
+    const result = structuredClone(newObject); // Clone obj2 to avoid mutating it
+
+    function mergeObjects(source, target) {
+        for (const key in source) {
+            if (typeof source[key] === "object" && !Array.isArray(source[key]) && source[key] !== null) {
+                // If the key exists in target and both are objects, merge them recursively
+                if (!target[key] || typeof target[key] !== "object" || Array.isArray(target[key])) {
+                    target[key] = {};
+                }
+                mergeObjects(source[key], target[key]);
+            } else {
+                // Otherwise, add the value from source if it's not in target
+                if (!(key in target)) {
+                    target[key] = source[key];
+                }
+            }
+        }
+    }
+
+    mergeObjects(oldObject, result);
+
+    return result;
 }

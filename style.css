@@ -26,6 +26,7 @@
     border-radius: 1000px;
     background-color: rgba(0, 0, 0, 0.47);
     transition: background-color 0.20s ease-in-out;
+    pointer-events: all;
 }
 
 .download {
