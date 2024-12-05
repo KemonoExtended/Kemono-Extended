@@ -74,7 +74,7 @@ CreateNodeObserver(
 let postID;
 let notificationID = 0;
 let wheelTiltListener = false;
-let lastPost = Number.MAX_SAFE_INTEGER;
+let lastPost;
 let version = "2.0"
 let currentURL = "";
 
@@ -367,7 +367,7 @@ function GetLastPostDate(site, service, userID) { // returns the last post date 
 }
 
 function CreateSeenBadge(postElement, lastPostDate) { //Creates a badge and style for posts that have been seen or read previously
-    if (!syncStorage.settings.readPostsFF.value) {
+    if (!syncStorage.settings.readPostsFF.value) { 
         return;
     }
     let userID = postElement.parentElement.href.match(regex.userToIDRegex)[0];
@@ -381,7 +381,7 @@ function CreateSeenBadge(postElement, lastPostDate) { //Creates a badge and styl
     const postID = postElement.parentElement.href.match(regex.postToIDRegex)[0];
     let postDate = postElement.parentElement.getElementsByClassName("timestamp")[0].dateTime;
     let postUnix = DateToUnix(postDate);
-    let newPost = lastPostDate < postUnix
+    let newPost = lastPostDate != NaN && lastPostDate != undefined && lastPostDate < postUnix
     if (syncStorage.postDB[userID].hasOwnProperty(postID) || newPost) {
         if (postElement.parentElement.getElementsByClassName("post-card__image-container").length == 0) {
             let textDiv = document.createElement("div");
@@ -455,7 +455,9 @@ function CreateUnreadBadge(element, entry) {
     })
     */
     if (syncStorage.postDB.hasOwnProperty(entry.id)) {
-        if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate") || syncStorage.postDB[entry.id].data.lastImportDate == NaN || syncStorage.postDB[entry.id].data.lastImportDate == -1) {
+        if (!syncStorage.postDB[entry.id].data.hasOwnProperty("lastImportDate") ||
+            syncStorage.postDB[entry.id].data.lastImportDate == NaN ||
+            syncStorage.postDB[entry.id].data.lastImportDate == -1) {
             syncStorage.postDB[entry.id].data.lastImportDate = -1;
         } else {
             let lastImportDate = syncStorage.postDB[entry.id].data.lastImportDate;
