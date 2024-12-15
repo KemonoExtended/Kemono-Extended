@@ -2,6 +2,8 @@
 
 Kemono Extended is a Firefox addon that aims to provide additional functionality to [Kemono.su](https://kemono.su) and [Coomer.su](https://coomer.su).<br><br>
 
+> [!WARNING]
+> This extension is broken at the moment. A fix will require rewriting large parts of the code. Please be patient.
 
 <h2>Features</h2>
 
